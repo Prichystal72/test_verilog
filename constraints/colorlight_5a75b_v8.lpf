@@ -1,0 +1,25 @@
+# colorlight_5a75b_v8.lpf
+#
+# nextpnr-ecp5 / Lattice-style physical constraints for the
+# Colorlight 5A-75B, board revision v8.0.
+#
+# FPGA on this revision: Lattice ECP5 LFE5U-25F-6BG256C
+#   (25k LUT, speed grade 6, CABGA256 package)
+# Source: https://github.com/q3k/chubby75/blob/master/5a-75b/hardware_V8.0.md
+#
+# NOTE: pinout differs between board revisions (v6.1/v7.0 use a
+# different, larger CABGA381 package). Re-check against the actual
+# board silkscreen/schematic before flashing real hardware.
+
+# 25 MHz oscillator feeding the FPGA (U33)
+LOCATE COMP "clk_i" SITE "P6";
+IOBUF PORT "clk_i" IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk_i" 25 MHZ;
+
+# KEY+ push button, active low, has an external pull-up
+LOCATE COMP "btn_n_i" SITE "R7";
+IOBUF PORT "btn_n_i" IO_TYPE=LVCMOS33;
+
+# Onboard DATA_LED, active low, wired open-drain
+LOCATE COMP "led_n_o" SITE "T6";
+IOBUF PORT "led_n_o" IO_TYPE=LVCMOS33 OPENDRAIN=ON;
