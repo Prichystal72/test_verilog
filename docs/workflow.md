@@ -48,22 +48,23 @@ Výstup: `build\blink.bit`. **Nikam se nenahrává** — tenhle krok slouží
 jen k ověření, že design projde celým tokem bez chyb a že constraints
 (piny) odpovídají existující dokumentaci desky.
 
-## 3. Až bude hardware k dispozici
+## 3. Nahrání na hardware (ověřeno funkční)
 
-1. Ověřit revizi desky na štítku/potisku a porovnat s
-   [docs/board-colorlight-5a75b-v8.md](board-colorlight-5a75b-v8.md) —
-   pokud to není v8.0, přepiš/zkopíruj `.lpf` podle správné revize
-   (viz zdroje v tom souboru).
-2. Vyřešit `openFPGALoader` (viz bod 2 v
-   [toolchain-notes.md](toolchain-notes.md)) — bez fungujícího loaderu
-   nejde nahrát nic.
-3. Nahrání (typicky přes JTAG/UART adaptér na desce):
+Sestava: STM32F103 Blue Pill s nahraným [DirtyJTAG](https://github.com/jeanthom/DirtyJTAG)
+firmwarem jako JTAG adaptér, WinUSB driver nastavený přes Zadig. Zapojení
+pinů viz [docs/board-colorlight-5a75b-v8.md](board-colorlight-5a75b-v8.md#zapojení-stm32f103-dirtyjtag-firmware-na-tento-header).
 
-   ```powershell
-   openFPGALoader.exe -b colorlight-5a-75b build\blink.bit
-   ```
+```powershell
+cd C:\oss-cad-suite
+. .\environment.ps1              # nutné, viz toolchain-notes.md bod 3
+cd C:\Users\prich\Documents\Arduino\test_verilog
+openFPGALoader.exe -c dirtyJtag --detect        # ověření JTAG chainu (IDCODE LFE5U-25F)
+openFPGALoader.exe -c dirtyJtag build\blink.bit # nahrání do SRAM (dočasné, do vypnutí)
+```
 
-   (přesný název `-b` boardu ověřit v `openFPGALoader --list-boards`, až
-   bude nástroj funkční — u v8.0 revize se může lišit).
-4. Po nahrání by měla `DATA_LED` na desce viditelně blikat cca 2× za
-   sekundu (design dělí 25 MHz na bit 23 čítače).
+Po nahrání `DATA_LED` na desce viditelně bliká cca 2× za sekundu (design
+dělí 25 MHz na bit 23 čítače) — **potvrzeno na reálném HW**.
+
+Poznámka: `-b colorlight-5a-75b` (board profil místo `-c dirtyJtag`) jsme
+nezkoušeli, `-c dirtyJtag` funguje spolehlivě a je explicitní o použitém
+adaptéru.

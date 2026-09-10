@@ -17,6 +17,7 @@ constraints/          fyzické constraints (piny) pro konkrétní desku
 scripts/               PowerShell skripty pro celý flow
   sim.ps1             simulace (Icarus Verilog)
   build.ps1           synth -> place&route -> bitstream (bez nahrávání)
+  flash.ps1           nahrání bitstreamu na HW přes JTAG (openFPGALoader)
 build/                 (negitované) výstupy skriptů
 docs/
   board-colorlight-5a75b-v8.md   info o desce a piny
@@ -39,6 +40,10 @@ powershell -ExecutionPolicy Bypass -File scripts\sim.ps1 -Wave   # + GTKWave
 
 # plný build: synth + place&route + bitstream (bez HW, nikam se nenahrává)
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+
+# nahrání na reálný hardware (STM32 Blue Pill + DirtyJTAG), SRAM = dočasné
+powershell -ExecutionPolicy Bypass -File scripts\flash.ps1
+powershell -ExecutionPolicy Bypass -File scripts\flash.ps1 -Detect   # jen ověření JTAG chainu
 ```
 
 Detaily viz [docs/workflow.md](docs/workflow.md).
@@ -48,6 +53,9 @@ Detaily viz [docs/workflow.md](docs/workflow.md).
 - ✅ Simulace (`iverilog` + `vvp`) funguje a testbench prochází.
 - ✅ Plný build (`yosys` → `nextpnr-ecp5` → `ecppack`) proběhne a vyprodukuje
   platný `.bit` soubor cílený na `LFE5U-25F-6CABGA256`.
-- ⛔ Nahrání na desku (`openFPGALoader`) zatím netestováno — nemáme fyzický
-  hardware ani ho `openFPGALoader.exe` v tomto prostředí zatím nespustí
-  (viz [docs/toolchain-notes.md](docs/toolchain-notes.md)).
+- ✅ Nahrání na reálný hardware (`openFPGALoader` přes STM32F103 Blue Pill s
+  DirtyJTAG firmwarem, `-c dirtyJtag`) funguje — `blink.bit` nahraný do SRAM
+  FPGA, `DATA_LED` na desce viditelně bliká. Piny a zapojení viz
+  [docs/board-colorlight-5a75b-v8.md](docs/board-colorlight-5a75b-v8.md),
+  postřehy k `openFPGALoader.exe` (nutnost sourcovat `environment.ps1`) viz
+  [docs/toolchain-notes.md](docs/toolchain-notes.md).

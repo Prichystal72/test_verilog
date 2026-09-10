@@ -21,7 +21,7 @@ module blink #(
     reg [COUNTER_WIDTH-1:0] counter = {COUNTER_WIDTH{1'b0}};
 
     always @(posedge clk_i) begin
-        if (!btn_n_i)
+        if (btn_n_i)
             counter <= {COUNTER_WIDTH{1'b0}};
         else
             counter <= counter + 1'b1;

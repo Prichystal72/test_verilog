@@ -25,27 +25,43 @@ benign crash-on-exit".
 verze tohle už neopravila (pak lze `build.ps1` zase zpřísnit na kontrolu
 exit kódu).
 
-## 2. `openFPGALoader.exe` nejde vůbec spustit
+## 2. `openFPGALoader.exe` "nejde spustit" — vyřešeno, viz bod 3
 
-**Příznak:** `openFPGALoader.exe --Version` (i bez parametrů) padá s exit
-kódem `-1073741511` (`0xC0000139`, `STATUS_ENTRYPOINT_NOT_FOUND`) — tedy
-chybí exportovaná funkce v nějaké DLL, typicky nesoulad verzí mezi
-`.exe` a knihovnou (např. libusb/FTDI/zadig komponenty).
+Dřívější pozorování na jiné instalaci OSS CAD Suite (`ENTRYPOINT_NOT_FOUND`,
+`0xC0000139`) se na aktuální instalaci (`C:\oss-cad-suite`, staženo
+2026-09) neprojevilo. Co se skutečně objevilo a jak se to vyřešilo, viz
+bod 3 níže (`environment.ps1`). Pro flashování na reálný hardware navíc
+je potřeba WinUSB driver přes Zadig pro USB zařízení JTAG adaptéru
+(DirtyJTAG `0x1209:c0ca`) — bez něj `openFPGALoader` zařízení nenajde.
 
-**Dopad:** zatím nejde touhle instalací nic naprogramovat, i kdyby HW byl
-po ruce.
+**Ověřeno funkční:** STM32F103 Blue Pill s DirtyJTAG firmwarem,
+`openFPGALoader.exe -c dirtyJtag build\blink.bit` úspěšně naprogramoval
+SRAM FPGA na Colorlight 5A-75B v8.0 (LED viditelně blikala). Zapojení viz
+[docs/board-colorlight-5a75b-v8.md](board-colorlight-5a75b-v8.md).
 
-**Nebylo dál řešeno**, protože fyzický hardware stejně nemáme — needitovat
-teď. Až deska dorazí:
-1. Zkusit přeinstalovat/aktualizovat OSS CAD Suite (možná poškozený/
-   částečný archiv jen u této jedné binárky).
-2. Zkontrolovat, že `libusb`/ovladač (WinUSB/libusbK přes Zadig) je pro
-   JTAG/UART adaptér na desce nastavený.
-3. Alternativa: nahrát bitstream jiným nástrojem (např. přes OpenOCD,
-   nebo JTAG přes jiný existující nástroj), pokud `openFPGALoader` zůstane
-   nefunkční.
+## 3. `openFPGALoader.exe` padá s ACCESS_VIOLATION, pokud chybí `environment.ps1`
 
-## 3. Registry PATH změna se v aktuálním terminálu neprojeví hned
+**Příznak:** i s `C:\oss-cad-suite\bin` v PATH `openFPGALoader.exe --help`
+spadne okamžitě s `-1073741819` (`0xC0000005`, `STATUS_ACCESS_VIOLATION`),
+bez jakéhokoliv výstupu — dřív, než vypíše cokoliv.
+
+**Řešení:** nestačí mít jen `bin`+`lib` v PATH, je potřeba nejdřív
+sourcovat `C:\oss-cad-suite\environment.ps1` (nastaví další proměnné, ne
+jen PATH):
+
+```powershell
+cd C:\oss-cad-suite
+. .\environment.ps1
+openFPGALoader.exe --help   # teď funguje normálně
+```
+
+Po sourcování `--list-cables` správně vypíše i `dirtyJtag` (`0x1209:c0ca`).
+
+Toto vyžaduje spustit v každém novém shellu / na začátku skriptu, který
+`openFPGALoader` volá — zvážit doplnění do `build.ps1`/nového
+`flash.ps1`, až se bude řešit reálné nahrávání.
+
+## 4. Registry PATH změna se v aktuálním terminálu neprojeví hned
 
 `[Environment]::SetEnvironmentVariable("Path", ..., "User")` zapíše do
 registru, ale **již běžící procesy** (včetně terminálu, ve kterém právě
