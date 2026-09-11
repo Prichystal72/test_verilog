@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Logic Analyzer</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#12161c; --panel2:#161b22; --border:#2a313c;
+    --text:#e6edf3; --text-dim:#8b949e; --accent:#58a6ff; --accent2:#1f6feb;
+    --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --row-h:34px; --ruler-h:30px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--text); overflow:hidden;
+    font-family:-apple-system,'Segoe UI',Roboto,sans-serif; font-size:13px;
+    display:flex; flex-direction:column; height:100vh;
+  }
+  button{
+    font-family:inherit; font-size:13px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:8px 12px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; min-height:38px;
+  }
+  button:hover{background:#1c2229; border-color:#3d4653;}
+  button:active{background:#232a33;}
+  button.primary{background:var(--accent2); border-color:var(--accent2); color:#fff;}
+  button.primary:hover{background:#2c7be5;}
+  button:disabled{opacity:.45; cursor:default;}
+  input[type=text],input[type=number],select{
+    font-family:inherit; font-size:13px; background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:6px; padding:6px 8px;
+  }
+  ::-webkit-scrollbar{width:10px; height:10px;}
+  ::-webkit-scrollbar-thumb{background:#30363d; border-radius:5px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* ---------- toolbar ---------- */
+  #toolbar{
+    display:flex; align-items:center; gap:8px; padding:8px 10px;
+    background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  #toolbar .brand{display:flex; align-items:center; gap:8px; margin-right:6px;}
+  #toolbar .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--good); box-shadow:0 0 8px var(--good);}
+  #toolbar h1{font-size:14px; font-weight:600; margin:0;}
+  #toolbar .badge{font-size:10px; color:var(--warn); border:1px solid var(--warn); border-radius:4px; padding:2px 6px; letter-spacing:.04em;}
+  #toolbar .sep{width:1px; height:24px; background:var(--border); margin:0 4px;}
+  #toolbar .spacer{flex:1;}
+  #menuBtn{display:none;}
+  #captureStatus{font-size:12px; color:var(--text-dim); min-width:120px;}
+  #progressWrap{width:140px; height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; display:none;}
+  #progressBar{height:100%; width:0%; background:var(--accent); transition:width .1s linear;}
+
+  /* ---------- layout ---------- */
+  #main{flex:1; display:flex; overflow-y:auto; overflow-x:hidden; min-height:0;}
+  #sidebar{
+    width:230px; min-width:230px; background:var(--panel); border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+  }
+  #sidebar.collapsed{display:none;}
+  #sidebarHead{height:var(--ruler-h); display:flex; align-items:center; padding:0 10px;
+    font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);
+    border-bottom:1px solid var(--border); flex:none;}
+  .chrow{
+    height:var(--row-h); display:flex; align-items:center; gap:8px; padding:0 8px;
+    border-bottom:1px solid #1a1f26; cursor:pointer; user-select:none;
+  }
+  .chrow.bushead{background:#0f1319; color:var(--text-dim); font-size:11px; text-transform:uppercase; letter-spacing:.04em; cursor:default; height:22px;}
+  .chrow .swatch{width:12px;height:12px;border-radius:3px;flex:none;}
+  .chrow input[type=checkbox]{width:18px;height:18px;flex:none; accent-color:var(--accent);}
+  .chrow .lbl{flex:1; background:transparent; border:none; color:var(--text); font-size:12.5px; padding:4px; min-width:0;}
+  .chrow .lbl:focus{outline:1px solid var(--accent); border-radius:4px; background:var(--bg);}
+  .chrow.dim{opacity:.4;}
+
+  #canvasArea{flex:1; position:relative; min-width:0;}
+  #ruler{height:var(--ruler-h); border-bottom:1px solid var(--border); background:var(--panel2); position:relative; overflow:hidden;}
+  #waveWrap{position:relative;}
+  canvas{display:block; touch-action:none;}
+
+  /* ---------- statusbar ---------- */
+  #statusbar{
+    display:flex; align-items:center; gap:18px; padding:0 12px; height:30px; flex:none;
+    background:var(--panel); border-top:1px solid var(--border); font-size:11.5px; color:var(--text-dim);
+    overflow-x:auto; white-space:nowrap;
+  }
+  #statusbar b{color:var(--text); font-weight:600;}
+  #statusbar .cA{color:#ffa657;} #statusbar .cB{color:#79c0ff;}
+
+  /* ---------- decode panel ---------- */
+  #decodePanel{
+    position:absolute; right:0; top:0; bottom:0; width:260px; background:var(--panel);
+    border-left:1px solid var(--border); transform:translateX(100%); transition:transform .18s ease;
+    display:flex; flex-direction:column; z-index:5;
+  }
+  #decodePanel.open{transform:translateX(0);}
+  #decodePanel h2{font-size:12px; margin:0; padding:10px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;}
+  #decodeList{flex:1; overflow-y:auto; padding:6px;}
+  .decItem{font-size:11.5px; padding:6px 8px; border-radius:5px; margin-bottom:3px; background:var(--panel2); display:flex; justify-content:space-between; gap:8px;}
+  .decItem .t{color:var(--text-dim);}
+
+  .toast{
+    position:fixed; bottom:44px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#1c2229; border:1px solid var(--border); color:var(--text); padding:10px 16px;
+    border-radius:8px; font-size:13px; opacity:0; transition:all .25s ease; pointer-events:none; z-index:50;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.good{border-color:var(--good);} .toast.warn{border-color:var(--warn);}
+
+  @media (max-width:760px){
+    #sidebar{position:absolute; left:0; top:0; bottom:0; z-index:20; box-shadow:4px 0 24px rgba(0,0,0,.5);}
+    #sidebar.collapsed{display:none;}
+    #menuBtn{display:inline-flex;}
+    #decodePanel{width:85%;}
+    #toolbar h1{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="menuBtn" title="Kanály">&#9776;</button>
+  <div class="brand"><span class="dot"></span><h1>Logic Analyzer</h1><span class="badge">DEMO</span></div>
+  <div class="sep"></div>
+  <button id="btnGen" title="Vygenerovat nová testovací data">&#8635; Test data</button>
+  <button id="btnCapture" class="primary" title="Simulace: trigger &rarr; naplnění paměti &rarr; odeslání přes Wi-Fi">&#9679; Trigger &amp; Capture</button>
+  <span id="captureStatus"></span>
+  <div id="progressWrap"><div id="progressBar"></div></div>
+  <div class="sep"></div>
+  <button id="btnZoomOut" title="Oddálit (-)">&minus;</button>
+  <button id="btnZoomIn" title="Přiblížit (+)">&plus;</button>
+  <button id="btnZoomFit" title="Na celou šířku (Home)">&#8596; Fit</button>
+  <button id="btnCursors" title="Reset kurzorů">Kurzory</button>
+  <div class="sep"></div>
+  <button id="btnDecode" title="Panel dekódovaných sběrnic">&#9776; Dekódy</button>
+  <div class="spacer"></div>
+  <button id="btnExport" title="Uložit záznam jako JSON">&#8595; Export</button>
+  <input type="file" id="fileImport" accept=".json" style="display:none">
+  <button id="btnImport" title="Načíst uložený záznam">&#8593; Import</button>
+</div>
+
+<div id="main">
+  <aside id="sidebar">
+    <div id="sidebarHead">Kanály (16)</div>
+    <div id="chlist"></div>
+  </aside>
+  <div id="canvasArea">
+    <canvas id="ruler"></canvas>
+    <div id="waveWrap"><canvas id="wave"></canvas></div>
+    <div id="decodePanel">
+      <h2>Dekódované sběrnice <button id="closeDec" style="min-height:26px;padding:2px 8px;">&times;</button></h2>
+      <div id="decodeList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="statusbar">
+  <span>Vzorkování: <b id="stSampleRate">-</b></span>
+  <span>Vzorků: <b id="stTotal">-</b></span>
+  <span>Zobrazeno: <b id="stView">-</b></span>
+  <span class="cA">A: <b id="stCurA">-</b></span>
+  <span class="cB">B: <b id="stCurB">-</b></span>
+  <span>&Delta;: <b id="stDelta">-</b></span>
+  <span>f: <b id="stFreq">-</b></span>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   CONFIG / DATA MODEL
+   ============================================================ */
+const SAMPLE_RATE   = 2_000_000;      // 2 MSa/s
+const TOTAL_SAMPLES = 120_000;        // 60 ms of data
+const ROW_H  = 34;
+const RULER_H = 30;
+
+const CHDEFS = [
+  {label:'CLK',      color:'#f0883e', bus:null},
+  {label:'CNT0',     color:'#a5d6ff', bus:'COUNTER'},
+  {label:'CNT1',     color:'#79c0ff', bus:'COUNTER'},
+  {label:'CNT2',     color:'#56d4dd', bus:'COUNTER'},
+  {label:'CNT3',     color:'#39c5cf', bus:'COUNTER'},
+  {label:'PWM1',     color:'#ffa657', bus:null},
+  {label:'PWM2',     color:'#ffcb7a', bus:null},
+  {label:'SPI_CLK',  color:'#d2a8ff', bus:'SPI'},
+  {label:'SPI_MOSI', color:'#bc8cff', bus:'SPI'},
+  {label:'SPI_MISO', color:'#a371f7', bus:'SPI'},
+  {label:'SPI_CS',   color:'#8957e5', bus:'SPI'},
+  {label:'I2C_SCL',  color:'#7ee787', bus:'I2C'},
+  {label:'I2C_SDA',  color:'#56d364', bus:'I2C'},
+  {label:'UART_TX',  color:'#ff7b72', bus:'UART'},
+  {label:'RAND1',    color:'#f778ba', bus:null},
+  {label:'RAND2',    color:'#db61a2', bus:null},
+];
+
+const state = {
+  channels: CHDEFS.map((c,i)=>({...c, id:i, visible:true, data:new Uint8Array(TOTAL_SAMPLES)})),
+  sampleRate: SAMPLE_RATE,
+  totalSamples: TOTAL_SAMPLES,
+  view: {start:0, sPerPx:1},
+  cursors: {a:null, b:null},
+  drag: null,           // {mode:'pan'|'cursor', ...}
+  pinch: null,
+  decoded: {SPI:[], I2C:[], UART:[]},
+};
+
+/* ============================================================
+   TEST DATA GENERATORS
+   ============================================================ */
+function chByLabel(l){ return state.channels.find(c=>c.label===l); }
+
+function genClock(buf, period){
+  let level=0;
+  for(let i=0;i<buf.length;i++){
+    if(i % period === 0) level ^= 1;
+    buf[i]=level;
+  }
+}
+
+function genCounterBit(buf, clockPeriod, bit){
+  const div = clockPeriod * Math.pow(2,bit+1);
+  for(let i=0;i<buf.length;i++){
+    buf[i] = (Math.floor(i/div) & 1);
+  }
+}
+
+function genPWM(buf, period, dutyStart, dutyEnd){
+  for(let i=0;i<buf.length;i++){
+    const cyclePos = i % period;
+    const t = i/buf.length;
+    const duty = dutyStart + (dutyEnd-dutyStart)*t;
+    buf[i] = cyclePos < period*duty ? 1 : 0;
+  }
+}
+
+function genRandom(buf, minRun, maxRun, seed){
+  let level=0, i=0, s=seed;
+  const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+  while(i<buf.length){
+    const run = minRun + Math.floor(rnd()*(maxRun-minRun));
+    for(let k=0;k<run && i<buf.length;k++,i++) buf[i]=level;
+    level ^= 1;
+  }
+}
+
+// write a bit sequence into buf starting at sample 'pos', 'width' samples/bit
+function writeBits(buf,pos,bits,width){
+  for(const b of bits){ for(let k=0;k<width;k++){ if(pos<buf.length) buf[pos++]=b; } }
+  return pos;
+}
+
+function genSPI(clk,mosi,miso,cs,{period=2600, bitWidth=20}={}){
+  clk.fill(0); mosi.fill(0); miso.fill(0); cs.fill(1);
+  let pos = 200;
+  let txByte = 0x00;
+  while(pos+8*bitWidth*2+40 < clk.length){
+    const rxByte = (txByte ^ 0xA5) & 0xFF;
+    // CS low
+    let csStart=pos;
+    for(let b=7;b>=0;b--){
+      const mBit=(txByte>>b)&1, sBit=(rxByte>>b)&1;
+      for(let k=0;k<bitWidth;k++){
+        clk[pos]  = k < bitWidth/2 ? 0 : 1;
+        mosi[pos] = mBit;
+        miso[pos] = sBit;
+        cs[pos]   = 0;
+        pos++;
+      }
+    }
+    for(let k=csStart;k<pos;k++) cs[k]=0;
+    // idle gap, CS high
+    const gapEnd = Math.min(clk.length,pos + Math.floor(period-(pos-csStart)));
+    for(let k=pos;k<gapEnd;k++){ clk[k]=0; mosi[k]=0; miso[k]=0; cs[k]=1; }
+    pos = gapEnd;
+    txByte = (txByte+1)&0xFF;
+  }
+}
+
+function genI2C(scl,sda,{period=6000, bitWidth=40}={}){
+  scl.fill(1); sda.fill(1);
+  let pos = 300;
+  let addr = 0x50, data=0x00;
+  const putBitsMSBFirst=(val,n,withAck)=>{
+    for(let i=n-1;i>=0;i--){
+      const bit=(val>>i)&1;
+      // SDA change while SCL low, stable while SCL high
+      for(let k=0;k<bitWidth;k++){
+        const half = bitWidth/4;
+        scl[pos] = (k>half && k<bitWidth-half) ? 1 : 0;
+        sda[pos] = bit;
+        pos++;
+      }
+    }
+    if(withAck){ // ack bit, SDA pulled low by slave
+      for(let k=0;k<bitWidth;k++){ const half=bitWidth/4; scl[pos]=(k>half&&k<bitWidth-half)?1:0; sda[pos]=0; pos++; }
+    }
+  };
+  while(pos+period < scl.length){
+    const start=pos;
+    // idle
+    for(let k=0;k<bitWidth;k++){ scl[pos]=1; sda[pos]=1; pos++; }
+    // START: SDA falls while SCL high
+    for(let k=0;k<bitWidth/2;k++){ scl[pos]=1; sda[pos]= k<bitWidth/4 ? 1:0; pos++; }
+    putBitsMSBFirst((addr<<1)|0,8,true);   // address + write bit + ack
+    putBitsMSBFirst(data,8,true);          // data byte + ack
+    // STOP: SDA rises while SCL high
+    for(let k=0;k<bitWidth/2;k++){ scl[pos]=1; sda[pos]= k<bitWidth/4 ? 0:1; pos++; }
+    const gapEnd = Math.min(scl.length, start+period);
+    for(let k=pos;k<gapEnd;k++){ scl[k]=1; sda[k]=1; }
+    pos = gapEnd;
+    data=(data+1)&0xFF;
+    if(data===0) addr=(addr+1)&0x7F;
+  }
+}
+
+function genUART(buf,{period=3800, bitWidth=16, baseByte=0x30}={}){
+  buf.fill(1); // idle high
+  let pos=250, n=0;
+  while(pos+11*bitWidth < buf.length){
+    const byte=(baseByte+n)&0xFF;
+    const bits=[0]; // start bit
+    for(let i=0;i<8;i++) bits.push((byte>>i)&1); // LSB first
+    bits.push(1); bits.push(1); // stop bits (2, for visual clarity)
+    pos = writeBits(buf,pos,bits,bitWidth);
+    const gapEnd = Math.min(buf.length,pos + (period - bits.length*bitWidth));
+    for(let k=pos;k<gapEnd;k++) buf[k]=1;
+    pos=gapEnd; n++;
+  }
+}
+
+function generateTestData(){
+  const clockPeriod = 40;
+  genClock(chByLabel('CLK').data, clockPeriod);
+  for(let b=0;b<4;b++) genCounterBit(chByLabel('CNT'+b).data, clockPeriod, b);
+  genPWM(chByLabel('PWM1').data, 900, 0.08, 0.92);
+  genPWM(chByLabel('PWM2').data, 260, 0.5, 0.5);
+  genSPI(chByLabel('SPI_CLK').data, chByLabel('SPI_MOSI').data, chByLabel('SPI_MISO').data, chByLabel('SPI_CS').data);
+  genI2C(chByLabel('I2C_SCL').data, chByLabel('I2C_SDA').data);
+  genUART(chByLabel('UART_TX').data);
+  genRandom(chByLabel('RAND1').data, 30, 4000, 12345);
+  genRandom(chByLabel('RAND2').data, 5, 400, 99991);
+  decodeAll();
+}
+
+/* ============================================================
+   DECODERS
+   ============================================================ */
+function decodeSPI(){
+  const clk=chByLabel('SPI_CLK').data, mosi=chByLabel('SPI_MOSI').data,
+        miso=chByLabel('SPI_MISO').data, cs=chByLabel('SPI_CS').data;
+  const out=[];
+  let inTx=false, txStart=0, bitCount=0, mVal=0, sVal=0;
+  for(let i=1;i<clk.length;i++){
+    if(cs[i]===0 && cs[i-1]===1){ inTx=true; txStart=i; bitCount=0; mVal=0; sVal=0; }
+    if(inTx && clk[i]===1 && clk[i-1]===0){ // rising edge = sample
+      mVal=(mVal<<1)|mosi[i]; sVal=(sVal<<1)|miso[i]; bitCount++;
+      if(bitCount===8){
+        out.push({start:txStart,end:i,mosi:mVal,miso:sVal});
+        bitCount=0; mVal=0; sVal=0; txStart=i+1;
+      }
+    }
+    if(cs[i]===1 && cs[i-1]===0){ inTx=false; }
+  }
+  return out;
+}
+
+function decodeI2C(){
+  const scl=chByLabel('I2C_SCL').data, sda=chByLabel('I2C_SDA').data;
+  const out=[];
+  let bits=[], collecting=false, startPos=0;
+  for(let i=1;i<scl.length;i++){
+    if(scl[i]===1 && scl[i-1]===1 && sda[i]===0 && sda[i-1]===1){
+      out.push({start:i,type:'START'}); collecting=true; bits=[]; startPos=i;
+    } else if(scl[i]===1 && scl[i-1]===1 && sda[i]===1 && sda[i-1]===0){
+      if(bits.length) out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits)});
+      out.push({start:i,type:'STOP'}); collecting=false; bits=[];
+    } else if(collecting && scl[i]===1 && scl[i-1]===0){
+      bits.push(sda[i]);
+      if(bits.length===9){ // 8 data + ack
+        out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits.slice(0,8))});
+        bits=[]; startPos=i+1;
+      }
+    }
+  }
+  return out;
+}
+function bitsToByte(bits){ let v=0; for(const b of bits) v=(v<<1)|b; return v; }
+
+function decodeUART(){
+  const buf=chByLabel('UART_TX').data;
+  const bitWidth=16, out=[];
+  let i=0;
+  while(i<buf.length-11*bitWidth){
+    if(buf[i]===1 && buf[i+1]===0){
+      const start=i+1;
+      let sampleAt=start+Math.floor(bitWidth*1.5);
+      let val=0;
+      for(let b=0;b<8;b++){ val |= (buf[sampleAt]&1)<<b; sampleAt+=bitWidth; }
+      out.push({start:i,end:sampleAt,value:val});
+      i=sampleAt+bitWidth;
+    } else i++;
+  }
+  return out;
+}
+
+function decodeAll(){
+  state.decoded.SPI = decodeSPI();
+  state.decoded.I2C = decodeI2C();
+  state.decoded.UART = decodeUART();
+  renderDecodeList();
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+const chlistEl = document.getElementById('chlist');
+function buildSidebar(){
+  chlistEl.innerHTML='';
+  let lastBus=undefined;
+  for(const ch of state.channels){
+    if(ch.bus!==lastBus){
+      lastBus=ch.bus;
+      if(ch.bus){
+        const h=document.createElement('div');
+        h.className='chrow bushead'; h.textContent=ch.bus;
+        chlistEl.appendChild(h);
+      }
+    }
+    const row=document.createElement('div');
+    row.className='chrow'+(ch.visible?'':' dim');
+    row.innerHTML=`
+      <input type="checkbox" ${ch.visible?'checked':''}>
+      <span class="swatch" style="background:${ch.color}"></span>
+      <input class="lbl" type="text" value="${ch.label}">
+    `;
+    const cb=row.querySelector('input[type=checkbox]');
+    cb.addEventListener('change',()=>{ ch.visible=cb.checked; row.classList.toggle('dim',!ch.visible); resizeCanvases(); draw(); });
+    const lbl=row.querySelector('.lbl');
+    lbl.addEventListener('input',()=>{ ch.label=lbl.value; draw(); });
+    lbl.addEventListener('click',e=>e.stopPropagation());
+    chlistEl.appendChild(row);
+  }
+}
+
+/* ============================================================
+   CANVAS / VIEW MATH
+   ============================================================ */
+const rulerCv = document.getElementById('ruler');
+const waveCv  = document.getElementById('wave');
+const rulerCtx = rulerCv.getContext('2d');
+const waveCtx  = waveCv.getContext('2d');
+const canvasArea = document.getElementById('canvasArea');
+const waveWrap = document.getElementById('waveWrap');
+const DPR = Math.max(1, window.devicePixelRatio||1);
+
+function visibleChannels(){ return state.channels.filter(c=>c.visible); }
+
+function contentHeight(){ return visibleChannels().length * ROW_H + 8; }
+
+function resizeCanvases(){
+  const w = canvasArea.clientWidth;
+  rulerCv.style.width=w+'px'; rulerCv.style.height=RULER_H+'px';
+  rulerCv.width=w*DPR; rulerCv.height=RULER_H*DPR;
+
+  const h = contentHeight();
+  waveCv.style.width=w+'px'; waveCv.style.height=h+'px';
+  waveCv.width=w*DPR; waveCv.height=h*DPR;
+  waveWrap.style.height=h+'px';
+
+  clampView();
+  draw();
+}
+
+function maxSamplesPerPixel(){
+  const w = canvasArea.clientWidth||1;
+  return Math.max(1, Math.ceil(state.totalSamples / w) * 4);
+}
+function clampView(){
+  const w = canvasArea.clientWidth||1;
+  state.view.sPerPx = Math.min(Math.max(state.view.sPerPx, 0.02), maxSamplesPerPixel());
+  const spanSamples = w*state.view.sPerPx;
+  state.view.start = Math.min(Math.max(state.view.start,0), Math.max(0,state.totalSamples-spanSamples));
+}
+
+function sampleToX(s){ return (s-state.view.start)/state.view.sPerPx; }
+function xToSample(x){ return state.view.start + x*state.view.sPerPx; }
+
+function zoomAt(factor, pivotX){
+  const pivotSample = xToSample(pivotX);
+  state.view.sPerPx *= factor;
+  state.view.sPerPx = Math.min(Math.max(state.view.sPerPx,0.02), maxSamplesPerPixel());
+  state.view.start = pivotSample - pivotX*state.view.sPerPx;
+  clampView(); draw();
+}
+function panByPx(dx){ state.view.start += dx*state.view.sPerPx; clampView(); draw(); }
+function zoomToFit(){
+  const w=canvasArea.clientWidth||1;
+  state.view.sPerPx = state.totalSamples/w;
+  state.view.start = 0;
+  clampView(); draw();
+}
+
+/* ============================================================
+   DRAWING
+   ============================================================ */
+function fmtTime(sec){
+  const a=Math.abs(sec);
+  if(a<1e-6) return (sec*1e9).toFixed(1)+' ns';
+  if(a<1e-3) return (sec*1e6).toFixed(2)+' µs';
+  if(a<1)    return (sec*1e3).toFixed(3)+' ms';
+  return sec.toFixed(4)+' s';
+}
+function fmtFreq(hz){
+  if(!isFinite(hz)||hz<=0) return '-';
+  if(hz>1e6) return (hz/1e6).toFixed(3)+' MHz';
+  if(hz>1e3) return (hz/1e3).toFixed(3)+' kHz';
+  return hz.toFixed(2)+' Hz';
+}
+
+function drawRuler(){
+  const w=rulerCv.clientWidth;
+  rulerCtx.setTransform(DPR,0,0,DPR,0,0);
+  rulerCtx.clearRect(0,0,w,RULER_H);
+  rulerCtx.fillStyle='#12161c'; rulerCtx.fillRect(0,0,w,RULER_H);
+
+  const spanSec = w*state.view.sPerPx/state.sampleRate;
+  const targetPx=110;
+  const targetSec = targetPx*state.view.sPerPx/state.sampleRate;
+  const mag = Math.pow(10, Math.floor(Math.log10(targetSec)));
+  const steps=[1,2,5,10];
+  let step=mag;
+  for(const s of steps){ if(mag*s>=targetSec){ step=mag*s; break; } }
+
+  const startSec = state.view.start/state.sampleRate;
+  const firstTick = Math.ceil(startSec/step)*step;
+  rulerCtx.strokeStyle='#2a313c'; rulerCtx.fillStyle='#8b949e';
+  rulerCtx.font='10px sans-serif'; rulerCtx.textBaseline='middle';
+  for(let t=firstTick; t<startSec+spanSec+step; t+=step){
+    const x = sampleToX(t*state.sampleRate);
+    rulerCtx.beginPath(); rulerCtx.moveTo(x+.5,RULER_H-8); rulerCtx.lineTo(x+.5,RULER_H); rulerCtx.stroke();
+    rulerCtx.fillText(fmtTime(t), x+4, RULER_H/2-2);
+  }
+  rulerCtx.strokeStyle='#30363d';
+  rulerCtx.beginPath(); rulerCtx.moveTo(0,RULER_H-.5); rulerCtx.lineTo(w,RULER_H-.5); rulerCtx.stroke();
+}
+
+function drawChannel(ctx,ch,rowTop){
+  const w = waveCv.clientWidth;
+  const data = ch.data;
+  const yHigh = rowTop+6, yLow = rowTop+ROW_H-10, yMid=(yHigh+yLow)/2;
+  ctx.strokeStyle=ch.color; ctx.fillStyle=ch.color; ctx.lineWidth=1.6;
+  ctx.beginPath();
+
+  const s0 = Math.max(0, Math.floor(state.view.start));
+  const s1 = Math.min(data.length, Math.ceil(state.view.start + w*state.view.sPerPx)+1);
+  if(s1<=s0) return;
+
+  if(state.view.sPerPx <= 1.5){
+    let first=true, prevY=null;
+    for(let s=s0;s<s1;s++){
+      const x=sampleToX(s);
+      const y = data[s] ? yHigh : yLow;
+      if(first){ ctx.moveTo(x,y); first=false; } else {
+        if(prevY!==y) ctx.lineTo(x,prevY);
+        ctx.lineTo(x,y);
+      }
+      prevY=y;
+    }
+    ctx.lineTo(sampleToX(s1),prevY);
+    ctx.stroke();
+  } else {
+    // decimated min/max per pixel column
+    let x=0, lastLevel=data[s0];
+    ctx.moveTo(0, lastLevel?yHigh:yLow);
+    for(x=0; x<w; x++){
+      const a=Math.floor(xToSample(x)), b=Math.min(data.length,Math.floor(xToSample(x+1)));
+      if(b<=a) continue;
+      let hasHigh=false,hasLow=false;
+      const step=Math.max(1,Math.floor((b-a)/24));
+      for(let s=a;s<b;s+=step){ if(data[s]) hasHigh=true; else hasLow=true; if(hasHigh&&hasLow) break; }
+      if(hasHigh&&hasLow){
+        ctx.fillStyle=ch.color+'55';
+        ctx.fillRect(x,yHigh,1,yLow-yHigh);
+        ctx.moveTo(x+1,yMid);
+      } else {
+        const y = hasHigh?yHigh:yLow;
+        ctx.lineTo(x,y);
+      }
+    }
+    ctx.stroke();
+  }
+  void yMid;
+}
+
+function decodeAnnotationsFor(busName){ return state.decoded[busName]||[]; }
+
+function drawBusAnnotations(ctx, busName, rowTop, rowBottom){
+  const items = decodeAnnotationsFor(busName);
+  if(!items.length) return;
+  const y = rowTop+3, h=rowBottom-rowTop-6;
+  ctx.font='10px monospace'; ctx.textBaseline='middle';
+  for(const it of items){
+    const x0=sampleToX(it.start), x1=sampleToX(it.end!==undefined?it.end:it.start+4);
+    if(x1<0 || x0>waveCv.clientWidth) continue;
+    const w=Math.max(2,x1-x0);
+    let text='', col='#30363d';
+    if(busName==='SPI'){ text='M:'+it.mosi.toString(16).padStart(2,'0')+' S:'+it.miso.toString(16).padStart(2,'0'); col='#8957e5'; }
+    else if(busName==='UART'){ text='0x'+it.value.toString(16).padStart(2,'0'); col='#ff7b72'; }
+    else if(busName==='I2C'){
+      if(it.type==='START'){ text='S'; col='#3fb950'; }
+      else if(it.type==='STOP'){ text='P'; col='#f85149'; }
+      else { text='0x'+it.value.toString(16).padStart(2,'0'); col='#56d364'; }
+    }
+    ctx.fillStyle=col+'33'; ctx.fillRect(x0,y,Math.max(w,14),h);
+    ctx.strokeStyle=col; ctx.strokeRect(x0+.5,y+.5,Math.max(w,14)-1,h-1);
+    ctx.fillStyle='#e6edf3';
+    ctx.fillText(text, x0+3, y+h/2);
+  }
+}
+
+function draw(){
+  const w=waveCv.clientWidth, h=contentHeight();
+  waveCtx.setTransform(DPR,0,0,DPR,0,0);
+  waveCtx.clearRect(0,0,w,h);
+  waveCtx.fillStyle='#0d1117'; waveCtx.fillRect(0,0,w,h);
+
+  const chans = visibleChannels();
+  let rowTop=4;
+  let lastBus=undefined, busGroupStart=0;
+  const busRanges=[];
+  for(let i=0;i<chans.length;i++){
+    const ch=chans[i];
+    if(i>0 && i%2===0){ waveCtx.fillStyle='#ffffff05'; waveCtx.fillRect(0,rowTop,w,ROW_H); }
+    drawChannel(waveCtx,ch,rowTop);
+    if(ch.bus!==lastBus){
+      if(lastBus) busRanges.push({bus:lastBus,start:busGroupStart,end:rowTop});
+      lastBus=ch.bus; busGroupStart=rowTop;
+    }
+    waveCtx.strokeStyle='#1a1f26'; waveCtx.beginPath();
+    waveCtx.moveTo(0,rowTop+ROW_H+.5); waveCtx.lineTo(w,rowTop+ROW_H+.5); waveCtx.stroke();
+    rowTop+=ROW_H;
+  }
+  if(lastBus) busRanges.push({bus:lastBus,start:busGroupStart,end:rowTop});
+  for(const br of busRanges){ if(state.decoded[br.bus]) drawBusAnnotations(waveCtx, br.bus, br.end-16, br.end); }
+
+  drawCursor(waveCtx,'a','#ffa657', h);
+  drawCursor(waveCtx,'b','#79c0ff', h);
+
+  drawRuler();
+  drawCursorRuler();
+  updateStatusbar();
+}
+
+function drawCursor(ctx,key,color,h){
+  const s = state.cursors[key];
+  if(s==null) return;
+  const x = sampleToX(s);
+  if(x<-20||x>waveCv.clientWidth+20) return;
+  ctx.strokeStyle=color; ctx.lineWidth=1.4; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
+  ctx.setLineDash([]);
+}
+function drawCursorRuler(){
+  for(const [key,color] of [['a','#ffa657'],['b','#79c0ff']]){
+    const s=state.cursors[key]; if(s==null) continue;
+    const x=sampleToX(s); if(x<-20||x>rulerCv.clientWidth+20) continue;
+    rulerCtx.fillStyle=color;
+    rulerCtx.beginPath(); rulerCtx.moveTo(x-6,4); rulerCtx.lineTo(x+6,4); rulerCtx.lineTo(x,12); rulerCtx.closePath(); rulerCtx.fill();
+  }
+}
+
+function renderDecodeList(){
+  const el=document.getElementById('decodeList');
+  const parts=[];
+  for(const bus of ['SPI','I2C','UART']){
+    const items=state.decoded[bus];
+    parts.push(`<div style="padding:6px 4px;color:#8b949e;font-size:11px;text-transform:uppercase;">${bus} &mdash; ${items.length} položek</div>`);
+    for(const it of items.slice(0,60)){
+      const t = fmtTime(it.start/state.sampleRate);
+      let label='';
+      if(bus==='SPI') label=`MOSI 0x${it.mosi.toString(16).padStart(2,'0')} / MISO 0x${it.miso.toString(16).padStart(2,'0')}`;
+      else if(bus==='UART') label=`0x${it.value.toString(16).padStart(2,'0')} ('${String.fromCharCode(it.value>=32&&it.value<127?it.value:46)}')`;
+      else if(bus==='I2C') label = it.type==='BYTE' ? `0x${it.value.toString(16).padStart(2,'0')}` : it.type;
+      parts.push(`<div class="decItem"><span class="t">${t}</span><span>${label}</span></div>`);
+    }
+  }
+  el.innerHTML=parts.join('');
+}
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+function updateStatusbar(){
+  document.getElementById('stSampleRate').textContent=(state.sampleRate/1e6)+' MSa/s';
+  document.getElementById('stTotal').textContent=state.totalSamples.toLocaleString('cs-CZ');
+  document.getElementById('stView').textContent=fmtTime(waveCv.clientWidth*state.view.sPerPx/state.sampleRate);
+  const a=state.cursors.a, b=state.cursors.b;
+  document.getElementById('stCurA').textContent = a==null?'-':fmtTime(a/state.sampleRate);
+  document.getElementById('stCurB').textContent = b==null?'-':fmtTime(b/state.sampleRate);
+  if(a!=null && b!=null){
+    const dt=Math.abs(b-a)/state.sampleRate;
+    document.getElementById('stDelta').textContent=fmtTime(dt);
+    document.getElementById('stFreq').textContent=fmtFreq(1/dt);
+  } else {
+    document.getElementById('stDelta').textContent='-';
+    document.getElementById('stFreq').textContent='-';
+  }
+}
+
+/* ============================================================
+   INTERACTION: mouse / wheel / keyboard / touch
+   ============================================================ */
+function nearestCursorAtX(x){
+  const th=14;
+  for(const key of ['a','b']){
+    const s=state.cursors[key]; if(s==null) continue;
+    if(Math.abs(sampleToX(s)-x)<th) return key;
+  }
+  return null;
+}
+
+waveCv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect=waveCv.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  if(e.shiftKey){ panByPx(e.deltaY); return; }
+  const factor = e.deltaY>0 ? 1.18 : 1/1.18;
+  zoomAt(factor,x);
+},{passive:false});
+
+waveCv.addEventListener('mousedown', e=>{
+  const rect=waveCv.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const cur=nearestCursorAtX(x);
+  if(cur){ state.drag={mode:'cursor',key:cur}; }
+  else if(e.shiftKey || e.button===0){
+    if(e.altKey){
+      state.cursors.a==null||e.metaKey ? null : null;
+    }
+    state.drag={mode:'pan', lastX:e.clientX};
+  }
+});
+waveCv.addEventListener('dblclick', e=>{
+  const rect=waveCv.getBoundingClientRect();
+  const s=Math.round(xToSample(e.clientX-rect.left));
+  if(!e.shiftKey) state.cursors.a=s; else state.cursors.b=s;
+  draw();
+});
+window.addEventListener('mousemove', e=>{
+  if(!state.drag) return;
+  if(state.drag.mode==='pan'){
+    const dx=e.clientX-state.drag.lastX;
+    state.drag.lastX=e.clientX;
+    panByPx(-dx);
+  } else if(state.drag.mode==='cursor'){
+    const rect=waveCv.getBoundingClientRect();
+    state.cursors[state.drag.key]=Math.round(xToSample(e.clientX-rect.left));
+    draw();
+  }
+});
+window.addEventListener('mouseup', ()=>{ state.drag=null; });
+
+waveCv.addEventListener('contextmenu', e=>e.preventDefault());
+waveCv.addEventListener('click', e=>{
+  if(e.detail>1) return; // ignore part of dblclick
+});
+
+/* touch: 1 finger = pan or drag cursor, 2 fingers = pinch zoom+pan */
+function touchDist(t0,t1){ return Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY); }
+function touchMid(t0,t1){ return (t0.clientX+t1.clientX)/2; }
+
+waveCv.addEventListener('touchstart', e=>{
+  const rect=waveCv.getBoundingClientRect();
+  if(e.touches.length===1){
+    const x=e.touches[0].clientX-rect.left;
+    const cur=nearestCursorAtX(x);
+    if(cur) state.drag={mode:'cursor',key:cur};
+    else state.drag={mode:'pan', lastX:e.touches[0].clientX};
+  } else if(e.touches.length===2){
+    state.drag=null;
+    state.pinch={ dist:touchDist(e.touches[0],e.touches[1]), mid:touchMid(e.touches[0],e.touches[1])-rect.left, sPerPx:state.view.sPerPx, start:state.view.start };
+  }
+  e.preventDefault();
+},{passive:false});
+
+waveCv.addEventListener('touchmove', e=>{
+  const rect=waveCv.getBoundingClientRect();
+  if(e.touches.length===1 && state.drag){
+    if(state.drag.mode==='pan'){
+      const dx=e.touches[0].clientX-state.drag.lastX;
+      state.drag.lastX=e.touches[0].clientX;
+      panByPx(-dx);
+    } else if(state.drag.mode==='cursor'){
+      state.cursors[state.drag.key]=Math.round(xToSample(e.touches[0].clientX-rect.left));
+      draw();
+    }
+  } else if(e.touches.length===2 && state.pinch){
+    const d=touchDist(e.touches[0],e.touches[1]);
+    const scale = state.pinch.dist/Math.max(1,d);
+    const pivotSample = state.pinch.start + state.pinch.mid*state.pinch.sPerPx;
+    state.view.sPerPx = state.pinch.sPerPx*scale;
+    state.view.sPerPx = Math.min(Math.max(state.view.sPerPx,0.02), maxSamplesPerPixel());
+    const mid = touchMid(e.touches[0],e.touches[1])-rect.left;
+    state.view.start = pivotSample - mid*state.view.sPerPx;
+    clampView(); draw();
+  }
+  e.preventDefault();
+},{passive:false});
+
+waveCv.addEventListener('touchend', e=>{
+  if(e.touches.length<2) state.pinch=null;
+  if(e.touches.length===0) state.drag=null;
+});
+
+let lastTap=0;
+waveCv.addEventListener('touchend', e=>{
+  const now=Date.now();
+  if(now-lastTap<300 && e.changedTouches.length){
+    zoomToFit();
+  }
+  lastTap=now;
+});
+
+window.addEventListener('keydown', e=>{
+  if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const w=canvasArea.clientWidth;
+  if(e.key==='ArrowLeft') panByPx(-w*0.12);
+  else if(e.key==='ArrowRight') panByPx(w*0.12);
+  else if(e.key==='+'||e.key==='=') zoomAt(1/1.4, w/2);
+  else if(e.key==='-'||e.key==='_') zoomAt(1.4, w/2);
+  else if(e.key==='Home'||e.key==='0') zoomToFit();
+});
+
+let wasNarrow = window.innerWidth<=760;
+window.addEventListener('resize', ()=>{
+  const isNarrow = window.innerWidth<=760;
+  if(isNarrow !== wasNarrow){
+    document.getElementById('sidebar').classList.toggle('collapsed', isNarrow);
+    wasNarrow = isNarrow;
+  }
+  resizeCanvases();
+});
+
+/* ============================================================
+   TOOLBAR ACTIONS
+   ============================================================ */
+function toast(msg, kind){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show '+(kind||'');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2600);
+}
+
+document.getElementById('btnGen').addEventListener('click', ()=>{
+  generateTestData(); resizeCanvases(); toast('Nová testovací data vygenerována','good');
+});
+document.getElementById('btnZoomIn').addEventListener('click', ()=>zoomAt(1/1.5, canvasArea.clientWidth/2));
+document.getElementById('btnZoomOut').addEventListener('click', ()=>zoomAt(1.5, canvasArea.clientWidth/2));
+document.getElementById('btnZoomFit').addEventListener('click', zoomToFit);
+document.getElementById('btnCursors').addEventListener('click', ()=>{
+  const w=canvasArea.clientWidth;
+  state.cursors.a=Math.round(xToSample(w*0.35));
+  state.cursors.b=Math.round(xToSample(w*0.65));
+  draw();
+});
+document.getElementById('btnDecode').addEventListener('click', ()=>{
+  document.getElementById('decodePanel').classList.toggle('open');
+});
+document.getElementById('closeDec').addEventListener('click', ()=>{
+  document.getElementById('decodePanel').classList.remove('open');
+});
+document.getElementById('menuBtn').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const payload={
+    sampleRate: state.sampleRate,
+    totalSamples: state.totalSamples,
+    channels: state.channels.map(c=>({label:c.label,color:c.color,bus:c.bus,visible:c.visible,data:Array.from(c.data)})),
+  };
+  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='logic_capture_'+Date.now()+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Záznam uložen jako JSON','good');
+});
+document.getElementById('btnImport').addEventListener('click', ()=>document.getElementById('fileImport').click());
+document.getElementById('fileImport').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const payload=JSON.parse(reader.result);
+      state.sampleRate=payload.sampleRate; state.totalSamples=payload.totalSamples;
+      state.channels=payload.channels.map((c,i)=>({...c, id:i, data:Uint8Array.from(c.data)}));
+      buildSidebar(); decodeAll(); resizeCanvases(); zoomToFit();
+      toast('Záznam načten: '+f.name,'good');
+    }catch(err){ toast('Chyba při načítání souboru','warn'); }
+  };
+  reader.readAsText(f);
+});
+
+/* ---- simulated trigger -> memory fill -> wifi send ---- */
+const captureStatusEl=document.getElementById('captureStatus');
+const progressWrap=document.getElementById('progressWrap');
+const progressBar=document.getElementById('progressBar');
+function setProgress(p){ progressBar.style.width=(p*100).toFixed(0)+'%'; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+document.getElementById('btnCapture').addEventListener('click', async ()=>{
+  const btn=document.getElementById('btnCapture');
+  btn.disabled=true; progressWrap.style.display='block';
+  try{
+    captureStatusEl.textContent='Čekání na trigger…';
+    setProgress(0);
+    await sleep(500+Math.random()*700);
+
+    captureStatusEl.textContent='Plním paměť (SDRAM)…';
+    for(let p=0;p<=1;p+=0.08){ setProgress(p); await sleep(45); }
+
+    captureStatusEl.textContent='Odesílám přes Wi-Fi…';
+    for(let p=0;p<=1;p+=0.05){ setProgress(p); await sleep(35); }
+
+    generateTestData();
+    resizeCanvases(); zoomToFit();
+    captureStatusEl.textContent='Hotovo — '+state.totalSamples.toLocaleString('cs-CZ')+' vzorků';
+    toast('Záznam dokončen ('+(state.totalSamples/1e3).toFixed(0)+'k vzorků @ '+(state.sampleRate/1e6)+' MSa/s)','good');
+  } finally {
+    btn.disabled=false;
+    setTimeout(()=>{progressWrap.style.display='none'; setProgress(0);},900);
+  }
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init(){
+  if(window.innerWidth<=760) document.getElementById('sidebar').classList.add('collapsed');
+  generateTestData();
+  buildSidebar();
+  resizeCanvases();
+  zoomToFit();
+  state.cursors.a=Math.round(state.totalSamples*0.2);
+  state.cursors.b=Math.round(state.totalSamples*0.3);
+  draw();
+}
+init();
+</script>
+</body>
+</html>
