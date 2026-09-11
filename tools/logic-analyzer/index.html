@@ -673,13 +673,32 @@ function drawChannel(ctx,ch,rowTop){
   const w = waveCv.clientWidth;
   const data = ch.data;
   const yHigh = rowTop+6, yLow = rowTop+ROW_H-10, yMid=(yHigh+yLow)/2;
-  ctx.strokeStyle=ch.color; ctx.fillStyle=ch.color; ctx.lineWidth=1.6;
-  ctx.shadowColor=ch.color; ctx.shadowBlur=7; ctx.shadowOffsetY=1;
-  ctx.beginPath();
-
   const s0 = Math.max(0, Math.floor(state.view.start));
   const s1 = Math.min(data.length, Math.ceil(state.view.start + w*state.view.sPerPx)+1);
   if(s1<=s0) return;
+
+  // soft gradient fill under the trace, like an area chart
+  {
+    const baseline=yLow+18;
+    const grad = ctx.createLinearGradient(0,yHigh,0,baseline);
+    grad.addColorStop(0, ch.color+'4d');
+    grad.addColorStop(1, ch.color+'00');
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.moveTo(0,baseline);
+    const cols=Math.min(w,420);
+    for(let i=0;i<=cols;i++){
+      const x=i*w/cols;
+      const s=Math.max(0,Math.min(data.length-1,Math.round(xToSample(x))));
+      ctx.lineTo(x, data[s]?yHigh:yLow);
+    }
+    ctx.lineTo(w,baseline);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.strokeStyle=ch.color; ctx.fillStyle=ch.color; ctx.lineWidth=1.6;
+  ctx.beginPath();
 
   if(state.view.sPerPx <= 1.5){
     let first=true, prevY=null;
@@ -715,7 +734,6 @@ function drawChannel(ctx,ch,rowTop){
     }
     ctx.stroke();
   }
-  ctx.shadowBlur=0; ctx.shadowOffsetY=0;
   void yMid;
 }
 
