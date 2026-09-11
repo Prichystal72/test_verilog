@@ -99,6 +99,47 @@
   .decItem{font-size:11.5px; padding:6px 8px; border-radius:5px; margin-bottom:3px; background:var(--panel2); display:flex; justify-content:space-between; gap:8px;}
   .decItem .t{color:var(--text-dim);}
 
+  /* ---------- mode tabs / popover / terminal / generator ---------- */
+  #modeTabs{display:flex; gap:4px; background:var(--bg); padding:3px; border-radius:8px; border:1px solid var(--border);}
+  #modeTabs .tab{border:none; background:transparent; min-height:30px; padding:5px 12px; border-radius:6px;}
+  #modeTabs .tab.active{background:var(--accent2); color:#fff;}
+  #analyzerTools{display:contents;}
+  body.mode-generator #analyzerTools{display:none;}
+  body.mode-generator #tabGenerator{}
+
+  .popover{
+    position:fixed; top:52px; left:50%; transform:translateX(-50%) translateY(-8px); z-index:40;
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+    width:300px; box-shadow:0 12px 32px rgba(0,0,0,.5); display:none; flex-direction:column; gap:10px;
+  }
+  .popover.open{display:flex;}
+  .popover h3{margin:0; font-size:13px;}
+  .popover label{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--text-dim);}
+  .popoverRow{display:flex; gap:8px;}
+  .dimtext{font-size:11px; color:var(--text-dim);}
+
+  #termBar{display:none; background:var(--panel); border-top:1px solid var(--border); flex:none;}
+  body.mode-generator #termBar{display:block;}
+  #termLog{max-height:110px; overflow-y:auto; padding:6px 10px; font-family:'Cascadia Code',Consolas,monospace; font-size:11.5px;}
+  #termLog .l{padding:1px 0; color:var(--text-dim);}
+  #termLog .l .ch{color:var(--accent);}
+  #termLog .l.err{color:var(--bad);}
+  #termInputRow{display:flex; align-items:center; gap:8px; padding:8px 10px; border-top:1px solid #1a1f26;}
+  #termInputRow .prompt{color:var(--good); font-family:monospace;}
+  #termInput{flex:1; font-family:'Cascadia Code',Consolas,monospace; min-height:36px;}
+
+  .chrow .level{
+    font-size:9.5px; border-radius:4px; padding:2px 5px; border:1px solid var(--border); flex:none; cursor:pointer;
+    background:var(--bg); color:var(--text-dim);
+  }
+  .chrow .level.v5{color:#ffa657; border-color:#ffa65766;}
+  .chrow .level.v33{color:#79c0ff; border-color:#79c0ff66;}
+  body:not(.mode-generator) .chrow .level{display:none;}
+
+  .decItem .replayBtn{
+    background:var(--accent2); color:#fff; border:none; border-radius:4px; padding:2px 8px; font-size:10.5px; cursor:pointer; flex:none;
+  }
+
   .toast{
     position:fixed; bottom:44px; left:50%; transform:translateX(-50%) translateY(20px);
     background:#1c2229; border:1px solid var(--border); color:var(--text); padding:10px 16px;
@@ -123,10 +164,19 @@
   <button id="menuBtn" title="Kanály">&#9776;</button>
   <div class="brand"><span class="dot"></span><h1>Logic Analyzer</h1><span class="badge">DEMO</span></div>
   <div class="sep"></div>
-  <button id="btnGen" title="Vygenerovat nová testovací data">&#8635; Test data</button>
-  <button id="btnCapture" class="primary" title="Simulace: trigger &rarr; naplnění paměti &rarr; odeslání přes Wi-Fi">&#9679; Trigger &amp; Capture</button>
-  <span id="captureStatus"></span>
-  <div id="progressWrap"><div id="progressBar"></div></div>
+  <div id="modeTabs">
+    <button id="tabAnalyzer" class="tab active">&#128202; Analyzer</button>
+    <button id="tabGenerator" class="tab">&#9889; Generátor</button>
+  </div>
+  <div class="sep"></div>
+  <span id="analyzerTools">
+    <button id="btnGen" title="Vygenerovat nová testovací data">&#8635; Test data</button>
+    <button id="btnCapture" class="primary" title="Simulace: trigger &rarr; naplnění paměti &rarr; odeslání přes Wi-Fi">&#9679; Trigger &amp; Capture</button>
+    <button id="btnTrigCfg" title="Nastavit trigger na vzor">&#8981; Trigger…</button>
+    <button id="btnRoll" title="Živě se posouvající záznam">&#8635; Roll mode</button>
+    <span id="captureStatus"></span>
+    <div id="progressWrap"><div id="progressBar"></div></div>
+  </span>
   <div class="sep"></div>
   <button id="btnZoomOut" title="Oddálit (-)">&minus;</button>
   <button id="btnZoomIn" title="Přiblížit (+)">&plus;</button>
@@ -138,6 +188,24 @@
   <button id="btnExport" title="Uložit záznam jako JSON">&#8595; Export</button>
   <input type="file" id="fileImport" accept=".json" style="display:none">
   <button id="btnImport" title="Načíst uložený záznam">&#8593; Import</button>
+</div>
+
+<div id="trigPanel" class="popover">
+  <h3>Trigger na vzor</h3>
+  <label>Kanál/sběrnice
+    <select id="trigChannel"></select>
+  </label>
+  <label>Vzor (hex bajty pro sběrnice, 0/1 pro jeden kanál)
+    <input type="text" id="trigPattern" placeholder="AA nebo 10110">
+  </label>
+  <label>Pretrigger — % záznamu PŘED trigger událostí
+    <input type="number" id="trigPretrigger" min="0" max="90" value="10">
+  </label>
+  <div class="popoverRow">
+    <button id="trigApply" class="primary">Použít</button>
+    <button id="trigClear">Zrušit trigger</button>
+  </div>
+  <div id="trigSummary" class="dimtext"></div>
 </div>
 
 <div id="main">
@@ -155,6 +223,16 @@
   </div>
 </div>
 
+<div id="termBar">
+  <div id="termLog"></div>
+  <div id="termInputRow">
+    <span class="prompt">&gt;</span>
+    <input type="text" id="termInput" placeholder="uart Hello   |   spi AA BB CC   |   i2c 50 00 FF   |   help" autocomplete="off">
+    <select id="presetSelect"><option value="">Presety…</option></select>
+    <button id="btnPresetSave" title="Uložit aktuální frontu jako preset">&#128190; Uložit preset</button>
+  </div>
+</div>
+
 <div id="statusbar">
   <span>Vzorkování: <b id="stSampleRate">-</b></span>
   <span>Vzorků: <b id="stTotal">-</b></span>
@@ -163,6 +241,8 @@
   <span class="cB">B: <b id="stCurB">-</b></span>
   <span>&Delta;: <b id="stDelta">-</b></span>
   <span>f: <b id="stFreq">-</b></span>
+  <span>Měření (<b id="stMeasCh">-</b>): <b id="stMeas">-</b></span>
+  <span id="stTrigger"></span>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -203,9 +283,12 @@ const state = {
   totalSamples: TOTAL_SAMPLES,
   view: {start:0, sPerPx:1},
   cursors: {a:null, b:null},
+  triggerMarker: null,
+  trigger: null,
   drag: null,           // {mode:'pan'|'cursor', ...}
   pinch: null,
   decoded: {SPI:[], I2C:[], UART:[]},
+  mode: 'analyzer',
 };
 
 /* ============================================================
@@ -432,16 +515,24 @@ function buildSidebar(){
     }
     const row=document.createElement('div');
     row.className='chrow'+(ch.visible?'':' dim');
+    const lvl = ch.level||'5V';
     row.innerHTML=`
       <input type="checkbox" ${ch.visible?'checked':''}>
       <span class="swatch" style="background:${ch.color}"></span>
       <input class="lbl" type="text" value="${ch.label}">
+      <span class="level ${lvl==='3.3V'?'v33':'v5'}" title="Klik = přepnout výstupní úroveň (jen popisek, HW zatím neřídí)">${lvl}</span>
     `;
     const cb=row.querySelector('input[type=checkbox]');
     cb.addEventListener('change',()=>{ ch.visible=cb.checked; row.classList.toggle('dim',!ch.visible); resizeCanvases(); draw(); });
     const lbl=row.querySelector('.lbl');
     lbl.addEventListener('input',()=>{ ch.label=lbl.value; draw(); });
     lbl.addEventListener('click',e=>e.stopPropagation());
+    const lvlEl=row.querySelector('.level');
+    lvlEl.addEventListener('click',e=>{
+      e.stopPropagation();
+      ch.level = (ch.level==='3.3V') ? '5V' : '3.3V';
+      lvlEl.textContent=ch.level; lvlEl.classList.toggle('v33',ch.level==='3.3V'); lvlEl.classList.toggle('v5',ch.level!=='3.3V');
+    });
     chlistEl.appendChild(row);
   }
 }
@@ -457,9 +548,25 @@ const canvasArea = document.getElementById('canvasArea');
 const waveWrap = document.getElementById('waveWrap');
 const DPR = Math.max(1, window.devicePixelRatio||1);
 
+const BUSHEAD_H = 22;
 function visibleChannels(){ return state.channels.filter(c=>c.visible); }
 
-function contentHeight(){ return visibleChannels().length * ROW_H + 8; }
+// Shared layout so the sidebar list and the canvas rows always line up,
+// including the extra height bus-group header rows take in the sidebar.
+function layoutRows(){
+  const rows=[]; let y=0; let lastBus=undefined;
+  for(const ch of visibleChannels()){
+    if(ch.bus!==lastBus){
+      if(ch.bus){ rows.push({type:'bushead',bus:ch.bus,y,h:BUSHEAD_H}); y+=BUSHEAD_H; }
+      lastBus=ch.bus;
+    }
+    rows.push({type:'channel',ch,y,h:ROW_H});
+    y+=ROW_H;
+  }
+  return {rows, totalHeight:y+8};
+}
+
+function contentHeight(){ return layoutRows().totalHeight; }
 
 function resizeCanvases(){
   const w = canvasArea.clientWidth;
@@ -628,30 +735,41 @@ function draw(){
   waveCtx.clearRect(0,0,w,h);
   waveCtx.fillStyle='#0d1117'; waveCtx.fillRect(0,0,w,h);
 
-  const chans = visibleChannels();
-  let rowTop=4;
-  let lastBus=undefined, busGroupStart=0;
+  const {rows} = layoutRows();
+  let chIndex=0;
   const busRanges=[];
-  for(let i=0;i<chans.length;i++){
-    const ch=chans[i];
-    if(i>0 && i%2===0){ waveCtx.fillStyle='#ffffff05'; waveCtx.fillRect(0,rowTop,w,ROW_H); }
-    drawChannel(waveCtx,ch,rowTop);
-    if(ch.bus!==lastBus){
-      if(lastBus) busRanges.push({bus:lastBus,start:busGroupStart,end:rowTop});
-      lastBus=ch.bus; busGroupStart=rowTop;
+  let curBus=null, curBusStart=0;
+  for(const row of rows){
+    if(row.type==='bushead'){
+      waveCtx.fillStyle='#ffffff08'; waveCtx.fillRect(0,row.y,w,row.h);
+      waveCtx.fillStyle='#6e7681'; waveCtx.font='10px sans-serif'; waveCtx.textBaseline='middle';
+      waveCtx.fillText(row.bus, 6, row.y+row.h/2);
+      waveCtx.strokeStyle='#1a1f26'; waveCtx.beginPath();
+      waveCtx.moveTo(0,row.y+row.h+.5); waveCtx.lineTo(w,row.y+row.h+.5); waveCtx.stroke();
+      curBus=row.bus; curBusStart=row.y+row.h;
+      continue;
+    }
+    const ch=row.ch;
+    if(chIndex%2===1){ waveCtx.fillStyle='#ffffff05'; waveCtx.fillRect(0,row.y,w,ROW_H); }
+    drawChannel(waveCtx,ch,row.y);
+    chIndex++;
+    if(ch.bus!==curBus){
+      if(curBus) busRanges.push({bus:curBus,start:curBusStart,end:row.y});
+      curBus=ch.bus; curBusStart=row.y;
     }
     waveCtx.strokeStyle='#1a1f26'; waveCtx.beginPath();
-    waveCtx.moveTo(0,rowTop+ROW_H+.5); waveCtx.lineTo(w,rowTop+ROW_H+.5); waveCtx.stroke();
-    rowTop+=ROW_H;
+    waveCtx.moveTo(0,row.y+ROW_H+.5); waveCtx.lineTo(w,row.y+ROW_H+.5); waveCtx.stroke();
   }
-  if(lastBus) busRanges.push({bus:lastBus,start:busGroupStart,end:rowTop});
+  if(curBus && rows.length){ const lastRow=rows[rows.length-1]; busRanges.push({bus:curBus,start:curBusStart,end:lastRow.y+lastRow.h}); }
   for(const br of busRanges){ if(state.decoded[br.bus]) drawBusAnnotations(waveCtx, br.bus, br.end-16, br.end); }
 
   drawCursor(waveCtx,'a','#ffa657', h);
   drawCursor(waveCtx,'b','#79c0ff', h);
+  drawTriggerMarker(waveCtx,h);
 
   drawRuler();
   drawCursorRuler();
+  drawTriggerRuler();
   updateStatusbar();
 }
 
@@ -663,6 +781,21 @@ function drawCursor(ctx,key,color,h){
   ctx.strokeStyle=color; ctx.lineWidth=1.4; ctx.setLineDash([4,3]);
   ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
   ctx.setLineDash([]);
+}
+function drawTriggerMarker(ctx,h){
+  if(state.triggerMarker==null) return;
+  const x=sampleToX(state.triggerMarker);
+  if(x<-20||x>waveCv.clientWidth+20) return;
+  ctx.strokeStyle='#f85149'; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); ctx.stroke();
+}
+function drawTriggerRuler(){
+  if(state.triggerMarker==null) return;
+  const x=sampleToX(state.triggerMarker);
+  if(x<-30||x>rulerCv.clientWidth+30) return;
+  rulerCtx.fillStyle='#f85149';
+  rulerCtx.beginPath(); rulerCtx.moveTo(x-6,4); rulerCtx.lineTo(x+6,4); rulerCtx.lineTo(x,14); rulerCtx.closePath(); rulerCtx.fill();
+  rulerCtx.font='9px sans-serif'; rulerCtx.fillText('T', x-2, 24);
 }
 function drawCursorRuler(){
   for(const [key,color] of [['a','#ffa657'],['b','#79c0ff']]){
@@ -681,15 +814,31 @@ function renderDecodeList(){
     parts.push(`<div style="padding:6px 4px;color:#8b949e;font-size:11px;text-transform:uppercase;">${bus} &mdash; ${items.length} položek</div>`);
     for(const it of items.slice(0,60)){
       const t = fmtTime(it.start/state.sampleRate);
-      let label='';
-      if(bus==='SPI') label=`MOSI 0x${it.mosi.toString(16).padStart(2,'0')} / MISO 0x${it.miso.toString(16).padStart(2,'0')}`;
-      else if(bus==='UART') label=`0x${it.value.toString(16).padStart(2,'0')} ('${String.fromCharCode(it.value>=32&&it.value<127?it.value:46)}')`;
-      else if(bus==='I2C') label = it.type==='BYTE' ? `0x${it.value.toString(16).padStart(2,'0')}` : it.type;
-      parts.push(`<div class="decItem"><span class="t">${t}</span><span>${label}</span></div>`);
+      let label='', cmd='';
+      if(bus==='SPI'){
+        label=`MOSI 0x${it.mosi.toString(16).padStart(2,'0')} / MISO 0x${it.miso.toString(16).padStart(2,'0')}`;
+        cmd='spi '+it.mosi.toString(16).padStart(2,'0');
+      } else if(bus==='UART'){
+        const printable = it.value>=32&&it.value<127;
+        label=`0x${it.value.toString(16).padStart(2,'0')} ('${String.fromCharCode(printable?it.value:46)}')`;
+        cmd = printable ? ('uart '+String.fromCharCode(it.value)) : ('uart \\x'+it.value.toString(16));
+      } else if(bus==='I2C'){
+        label = it.type==='BYTE' ? `0x${it.value.toString(16).padStart(2,'0')}` : it.type;
+        if(it.type==='BYTE') cmd='i2c 50 '+it.value.toString(16).padStart(2,'0');
+      }
+      const btn = cmd ? `<button class="replayBtn" data-cmd="${cmd.replace(/"/g,'&quot;')}" title="Přehrát generátorem">&#9654;</button>` : '';
+      parts.push(`<div class="decItem"><span class="t">${t}</span><span>${label}</span>${btn}</div>`);
     }
   }
   el.innerHTML=parts.join('');
 }
+document.getElementById('decodeList').addEventListener('click', e=>{
+  const btn=e.target.closest('.replayBtn'); if(!btn) return;
+  switchMode('generator');
+  sendCommand(btn.dataset.cmd);
+  document.getElementById('decodePanel').classList.remove('open');
+  toast('Přehráno generátorem: '+btn.dataset.cmd,'good');
+});
 
 /* ============================================================
    STATUS BAR
@@ -709,6 +858,28 @@ function updateStatusbar(){
     document.getElementById('stDelta').textContent='-';
     document.getElementById('stFreq').textContent='-';
   }
+  autoMeasure();
+}
+
+function autoMeasure(){
+  const chEl=document.getElementById('stMeasCh'), valEl=document.getElementById('stMeas');
+  const ch = visibleChannels()[0];
+  if(!ch || state.cursors.a==null){ chEl.textContent='-'; valEl.textContent='-'; return; }
+  chEl.textContent=ch.label;
+  const data=ch.data;
+  const start=Math.max(1,Math.min(data.length-2,Math.round(state.cursors.a)));
+  function nextRising(from){
+    for(let i=from;i<data.length-1;i++){ if(data[i]===0 && data[i+1]===1) return i+1; }
+    return -1;
+  }
+  const r1=nextRising(start);
+  if(r1<0){ valEl.textContent='(bez hrany napravo od A)'; return; }
+  const r2=nextRising(r1+1);
+  if(r2<0){ valEl.textContent='(jen jedna hrana)'; return; }
+  let highCount=0; for(let i=r1;i<r2;i++) highCount+=data[i];
+  const period=(r2-r1)/state.sampleRate;
+  const duty=100*highCount/(r2-r1);
+  valEl.textContent = fmtTime(period)+' ('+fmtFreq(1/period)+'), duty '+duty.toFixed(1)+'%';
 }
 
 /* ============================================================
@@ -917,7 +1088,9 @@ document.getElementById('btnCapture').addEventListener('click', async ()=>{
   const btn=document.getElementById('btnCapture');
   btn.disabled=true; progressWrap.style.display='block';
   try{
-    captureStatusEl.textContent='Čekání na trigger…';
+    captureStatusEl.textContent = state.trigger
+      ? ('Čekání na vzor '+state.trigger.pattern+' na '+state.trigger.channel+'…')
+      : 'Čekání na trigger…';
     setProgress(0);
     await sleep(500+Math.random()*700);
 
@@ -928,8 +1101,9 @@ document.getElementById('btnCapture').addEventListener('click', async ()=>{
     for(let p=0;p<=1;p+=0.05){ setProgress(p); await sleep(35); }
 
     generateTestData();
+    state.triggerMarker = state.trigger ? Math.round(state.totalSamples*(state.trigger.pretrigger/100)) : null;
     resizeCanvases(); zoomToFit();
-    captureStatusEl.textContent='Hotovo — '+state.totalSamples.toLocaleString('cs-CZ')+' vzorků';
+    captureStatusEl.textContent='Hotovo — '+state.totalSamples.toLocaleString('cs-CZ')+' vzorků'+(state.trigger?' (trigger v '+state.trigger.pretrigger+'% zleva)':'');
     toast('Záznam dokončen ('+(state.totalSamples/1e3).toFixed(0)+'k vzorků @ '+(state.sampleRate/1e6)+' MSa/s)','good');
   } finally {
     btn.disabled=false;
@@ -938,11 +1112,233 @@ document.getElementById('btnCapture').addEventListener('click', async ()=>{
 });
 
 /* ============================================================
+   GENERATOR: encoders + terminal command parser
+   ============================================================ */
+function encodeUARTText(text,{bitWidth=16, gap=40}={}){
+  const bytes=[...text].map(c=>c.charCodeAt(0)&0xFF);
+  const cap = 80 + bytes.length*(11*bitWidth+gap) + 80;
+  const buf=new Uint8Array(cap).fill(1);
+  let pos=40;
+  for(const byte of bytes){
+    const bits=[0]; for(let i=0;i<8;i++) bits.push((byte>>i)&1); bits.push(1,1);
+    pos=writeBits(buf,pos,bits,bitWidth);
+    pos+=gap;
+  }
+  return {buf:buf.slice(0,pos+40), length:pos+40};
+}
+
+function encodeSPIBytes(bytes,{bitWidth=20, idle=80}={}){
+  const cap = idle + bytes.length*8*bitWidth + idle;
+  const clk=new Uint8Array(cap), mosi=new Uint8Array(cap), cs=new Uint8Array(cap).fill(1);
+  let pos=idle;
+  for(const byte of bytes){
+    for(let b=7;b>=0;b--){
+      const bit=(byte>>b)&1;
+      for(let k=0;k<bitWidth;k++){ clk[pos]=k<bitWidth/2?0:1; mosi[pos]=bit; cs[pos]=0; pos++; }
+    }
+  }
+  return {clk:clk.slice(0,pos+idle), mosi:mosi.slice(0,pos+idle), cs:cs.slice(0,pos+idle), length:pos+idle};
+}
+
+function encodeI2CBytes(addr,dataBytes,{bitWidth=40}={}){
+  const cap = 100 + (dataBytes.length+1)*9*bitWidth + 100;
+  const scl=new Uint8Array(cap).fill(1), sda=new Uint8Array(cap).fill(1);
+  let pos=40;
+  const putByteAck=(val)=>{
+    for(let i=7;i>=0;i--){
+      const bit=(val>>i)&1;
+      for(let k=0;k<bitWidth;k++){ const half=bitWidth/4; scl[pos]=(k>half&&k<bitWidth-half)?1:0; sda[pos]=bit; pos++; }
+    }
+    for(let k=0;k<bitWidth;k++){ const half=bitWidth/4; scl[pos]=(k>half&&k<bitWidth-half)?1:0; sda[pos]=0; pos++; }
+  };
+  for(let k=0;k<bitWidth;k++){ scl[pos]=1; sda[pos]=1; pos++; }
+  for(let k=0;k<bitWidth/2;k++){ scl[pos]=1; sda[pos]= k<bitWidth/4?1:0; pos++; }
+  putByteAck((addr<<1)|0);
+  for(const d of dataBytes) putByteAck(d);
+  for(let k=0;k<bitWidth/2;k++){ scl[pos]=1; sda[pos]= k<bitWidth/4?0:1; pos++; }
+  return {scl:scl.slice(0,pos), sda:sda.slice(0,pos), length:pos};
+}
+
+function setGenChannelData(label,data){
+  const ch = state.gen.channels.find(c=>c.label===label);
+  if(ch) ch.data=data;
+}
+
+function logTerm(text, isError, isInfo){
+  const el=document.getElementById('termLog');
+  const row=document.createElement('div');
+  row.className='l'+(isError?' err':'');
+  row.innerHTML = isInfo ? ('<span class="ch">&larr;</span> '+text) : ('<span class="ch">&gt;</span> '+text);
+  el.appendChild(row); el.scrollTop=el.scrollHeight;
+}
+
+function sendCommand(raw){
+  const line=(raw||'').trim();
+  if(!line) return;
+  logTerm(line,false);
+  const parts=line.split(/\s+/);
+  const kind=parts[0].toLowerCase();
+  try{
+    if(kind==='help'){
+      logTerm('Příkazy: uart &lt;text&gt;  |  spi &lt;hex bajty&gt;  |  i2c &lt;adresa hex&gt; &lt;data hex…&gt;  |  clear',false,true);
+    } else if(kind==='clear'){
+      document.getElementById('termLog').innerHTML='';
+    } else if(kind==='uart'){
+      const spaceIdx=line.indexOf(' ');
+      const text = spaceIdx===-1 ? '' : line.slice(spaceIdx+1);
+      if(!text) throw new Error('chybí text za "uart"');
+      const {buf,length}=encodeUARTText(text);
+      setGenChannelData('UART_TX', buf);
+      state.gen.totalSamples=length;
+      logTerm('UART odesláno: "'+text+'" ('+text.length+' znaků)',false,true);
+    } else if(kind==='spi'){
+      const bytes=parts.slice(1).map(h=>parseInt(h,16)).filter(n=>!isNaN(n));
+      if(!bytes.length) throw new Error('chybí hex bajty, např. "spi AA BB"');
+      const {clk,mosi,cs,length}=encodeSPIBytes(bytes);
+      setGenChannelData('SPI_CLK',clk); setGenChannelData('SPI_MOSI',mosi); setGenChannelData('SPI_CS',cs);
+      setGenChannelData('SPI_MISO', new Uint8Array(length));
+      state.gen.totalSamples=length;
+      logTerm('SPI odesláno: '+bytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(' '),false,true);
+    } else if(kind==='i2c'){
+      const hexes=parts.slice(1).map(h=>parseInt(h,16)).filter(n=>!isNaN(n));
+      if(hexes.length<1) throw new Error('chybí adresa, např. "i2c 50 01 02"');
+      const addr=hexes[0], data=hexes.slice(1);
+      const {scl,sda,length}=encodeI2CBytes(addr,data);
+      setGenChannelData('I2C_SCL',scl); setGenChannelData('I2C_SDA',sda);
+      state.gen.totalSamples=length;
+      logTerm('I2C odesláno: adresa 0x'+addr.toString(16)+', data '+(data.map(b=>'0x'+b.toString(16)).join(' ')||'(žádná)'),false,true);
+    } else {
+      throw new Error('neznámý příkaz "'+kind+'" (zkuste "help")');
+    }
+    if(kind!=='clear' && kind!=='help'){
+      state.gen.sentCommands.push(line);
+      decodeAll();
+      if(state.mode==='generator'){
+        state.totalSamples = Math.max(1,state.gen.totalSamples);
+        resizeCanvases(); zoomToFit();
+      }
+    }
+  }catch(err){
+    logTerm('Chyba: '+err.message, true);
+  }
+}
+
+document.getElementById('termInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ const v=e.target.value; e.target.value=''; sendCommand(v); }
+});
+
+/* ---- presets (localStorage) ---- */
+function loadPresets(){ try{ return JSON.parse(localStorage.getItem('la_presets_v1')||'[]'); }catch(e){ return []; } }
+function savePresets(list){ try{ localStorage.setItem('la_presets_v1', JSON.stringify(list)); }catch(e){} }
+function refreshPresetSelect(){
+  const sel=document.getElementById('presetSelect');
+  const list=loadPresets();
+  sel.innerHTML='<option value="">Presety…</option>'+list.map((p,i)=>`<option value="${i}">${p.name} (${p.cmds.length})</option>`).join('');
+}
+document.getElementById('btnPresetSave').addEventListener('click', ()=>{
+  if(!state.gen.sentCommands.length){ toast('Nejdřív pošlete aspoň jeden příkaz z terminálu','warn'); return; }
+  const name=prompt('Název presetu:','preset '+(loadPresets().length+1));
+  if(!name) return;
+  const list=loadPresets();
+  list.push({name, cmds:[...state.gen.sentCommands]});
+  savePresets(list); refreshPresetSelect();
+  toast('Preset uložen: '+name,'good');
+});
+document.getElementById('presetSelect').addEventListener('change', async e=>{
+  const idx=e.target.value; if(idx==='') return;
+  const list=loadPresets(); const preset=list[idx]; if(!preset){ e.target.value=''; return; }
+  for(const cmd of preset.cmds){ sendCommand(cmd); await sleep(120); }
+  e.target.value='';
+  toast('Přehrán preset: '+preset.name,'good');
+});
+
+/* ============================================================
+   MODE SWITCH (Analyzer <-> Generator)
+   ============================================================ */
+function switchMode(mode){
+  state.mode=mode;
+  document.body.classList.toggle('mode-generator', mode==='generator');
+  document.getElementById('tabAnalyzer').classList.toggle('active', mode==='analyzer');
+  document.getElementById('tabGenerator').classList.toggle('active', mode==='generator');
+  if(mode==='analyzer'){
+    state.channels=state.analyzer.channels; state.totalSamples=state.analyzer.totalSamples; state.sampleRate=state.analyzer.sampleRate;
+  } else {
+    state.channels=state.gen.channels; state.totalSamples=Math.max(1,state.gen.totalSamples); state.sampleRate=state.gen.sampleRate;
+  }
+  buildSidebar(); decodeAll(); resizeCanvases(); zoomToFit();
+}
+document.getElementById('tabAnalyzer').addEventListener('click', ()=>switchMode('analyzer'));
+document.getElementById('tabGenerator').addEventListener('click', ()=>switchMode('generator'));
+
+/* ============================================================
+   TRIGGER (pattern) popover
+   ============================================================ */
+document.getElementById('btnTrigCfg').addEventListener('click', ()=>{
+  const pop=document.getElementById('trigPanel');
+  if(!pop.dataset.inited){
+    document.getElementById('trigChannel').innerHTML = state.analyzer.channels.map(c=>`<option value="${c.label}">${c.label}</option>`).join('');
+    pop.dataset.inited='1';
+  }
+  pop.classList.toggle('open');
+});
+document.getElementById('trigApply').addEventListener('click', ()=>{
+  const channel=document.getElementById('trigChannel').value;
+  const pattern=document.getElementById('trigPattern').value.trim();
+  if(!pattern){ toast('Zadejte vzor','warn'); return; }
+  const pretrigger=Math.max(0,Math.min(90,Number(document.getElementById('trigPretrigger').value)||0));
+  state.trigger={channel,pattern,pretrigger};
+  updateTriggerSummary();
+  document.getElementById('trigPanel').classList.remove('open');
+  toast('Trigger nastaven: '+channel+' = '+pattern,'good');
+});
+document.getElementById('trigClear').addEventListener('click', ()=>{
+  state.trigger=null; document.getElementById('trigPattern').value='';
+  updateTriggerSummary();
+  document.getElementById('trigPanel').classList.remove('open');
+});
+function updateTriggerSummary(){
+  const s=document.getElementById('trigSummary'), st=document.getElementById('stTrigger');
+  if(state.trigger){
+    s.textContent='Aktivní: '+state.trigger.channel+' = '+state.trigger.pattern+', pretrigger '+state.trigger.pretrigger+'%';
+    st.textContent='⚡ Trigger: '+state.trigger.channel+'='+state.trigger.pattern+' (pretrig '+state.trigger.pretrigger+'%)';
+  } else { s.textContent='Žádný trigger nastaven (spustí okamžitě).'; st.textContent=''; }
+}
+
+/* ============================================================
+   ROLL MODE
+   ============================================================ */
+let rollTimer=null;
+document.getElementById('btnRoll').addEventListener('click', function(){
+  if(rollTimer){
+    clearInterval(rollTimer); rollTimer=null;
+    this.classList.remove('primary');
+    toast('Roll mode vypnut');
+    return;
+  }
+  this.classList.add('primary');
+  toast('Roll mode zapnut — živě se posouvající záznam','good');
+  rollTimer=setInterval(()=>{
+    if(state.mode!=='analyzer') return;
+    generateTestData();
+    const w=canvasArea.clientWidth;
+    state.view.start = Math.max(0, state.totalSamples - w*state.view.sPerPx);
+    clampView(); draw();
+  }, 700);
+});
+
+/* ============================================================
    INIT
    ============================================================ */
 function init(){
   if(window.innerWidth<=760) document.getElementById('sidebar').classList.add('collapsed');
   generateTestData();
+  state.analyzer = {channels: state.channels, sampleRate: state.sampleRate, totalSamples: state.totalSamples};
+  state.gen = {
+    channels: CHDEFS.map((c,i)=>({...c, id:i, level:'5V', visible:true, data:new Uint8Array(0)})),
+    sampleRate: SAMPLE_RATE, totalSamples: 0, sentCommands: [],
+  };
+  refreshPresetSelect();
+  updateTriggerSummary();
   buildSidebar();
   resizeCanvases();
   zoomToFit();
