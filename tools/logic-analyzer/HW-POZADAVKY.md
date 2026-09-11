@@ -54,9 +54,8 @@ Aplikace dnes má u každého kanálu jen **popisek** 5V/3.3V (viz
 
 - Typ optočlenu — **PC817 potvrzeně nestačí** (mezní frekvence
   ~80 kHz, rise/fall ~18 µs — na I2C 100 kHz těsně pod limitem, na
-  SPI/MHz vzorkování zcela nedostatečné). Potřeba rychlejší typ,
-  např. **6N137 / HCPL-0630** řady (desítky Mbit/s) — **dokoupit**,
-  na skladě je jen PC817.
+  SPI/MHz vzorkování zcela nedostatečné). **Rozhodnuto: dokoupit
+  6N137** (desítky Mbit/s), na skladě je jen PC817.
 - Přesné schéma zapojení DIR/OE na vyměněné straně (viz
   [ARCHITEKTURA.md](ARCHITEKTURA.md) — DIR na SN74CBT3245A neexistuje,
   jen OE).

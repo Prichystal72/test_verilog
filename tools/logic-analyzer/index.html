@@ -184,6 +184,7 @@
   <button id="btnCursors" title="Reset kurzorů">Kurzory</button>
   <div class="sep"></div>
   <button id="btnDecode" title="Panel dekódovaných sběrnic">&#9776; Dekódy</button>
+  <button id="btnBusCfg" title="Přiřazení kanálů ke sběrnicím">&#128268; Sběrnice…</button>
   <div class="spacer"></div>
   <button id="btnExport" title="Uložit záznam jako JSON">&#8595; Export</button>
   <input type="file" id="fileImport" accept=".json" style="display:none">
@@ -206,6 +207,16 @@
     <button id="trigClear">Zrušit trigger</button>
   </div>
   <div id="trigSummary" class="dimtext"></div>
+</div>
+
+<div id="busPanel" class="popover" style="width:340px;">
+  <h3>Přiřazení kanálů ke sběrnicím</h3>
+  <div id="busCfgBody"></div>
+  <div class="popoverRow">
+    <button id="busApply" class="primary">Použít</button>
+    <button id="busReset">Výchozí</button>
+  </div>
+  <div class="dimtext">Změní, který kanál dekodéry i generátor používají jako CLK/MOSI/SDA/atd. — nemusí to být kanál se stejným jménem.</div>
 </div>
 
 <div id="main">
@@ -289,6 +300,11 @@ const state = {
   pinch: null,
   decoded: {SPI:[], I2C:[], UART:[]},
   mode: 'analyzer',
+  busConfig: {
+    SPI:  {clk:'SPI_CLK', mosi:'SPI_MOSI', miso:'SPI_MISO', cs:'SPI_CS'},
+    I2C:  {scl:'I2C_SCL', sda:'I2C_SDA'},
+    UART: {tx:'UART_TX'},
+  },
 };
 
 /* ============================================================
@@ -432,9 +448,11 @@ function generateTestData(){
 /* ============================================================
    DECODERS
    ============================================================ */
+function busCh(bus,role){ return chByLabel(state.busConfig[bus][role]); }
+
 function decodeSPI(){
-  const clk=chByLabel('SPI_CLK').data, mosi=chByLabel('SPI_MOSI').data,
-        miso=chByLabel('SPI_MISO').data, cs=chByLabel('SPI_CS').data;
+  const clk=busCh('SPI','clk').data, mosi=busCh('SPI','mosi').data,
+        miso=busCh('SPI','miso').data, cs=busCh('SPI','cs').data;
   const out=[];
   let inTx=false, txStart=0, bitCount=0, mVal=0, sVal=0;
   for(let i=1;i<clk.length;i++){
@@ -452,7 +470,7 @@ function decodeSPI(){
 }
 
 function decodeI2C(){
-  const scl=chByLabel('I2C_SCL').data, sda=chByLabel('I2C_SDA').data;
+  const scl=busCh('I2C','scl').data, sda=busCh('I2C','sda').data;
   const out=[];
   let bits=[], collecting=false, startPos=0;
   for(let i=1;i<scl.length;i++){
@@ -462,10 +480,20 @@ function decodeI2C(){
       if(bits.length) out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits)});
       out.push({start:i,type:'STOP'}); collecting=false; bits=[];
     } else if(collecting && scl[i]===1 && scl[i-1]===0){
-      bits.push(sda[i]);
-      if(bits.length===9){ // 8 data + ack
-        out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits.slice(0,8))});
-        bits=[]; startPos=i+1;
+      // Lookahead: if SCL stays high and SDA then rises before SCL falls
+      // again, this edge is actually the start of a STOP condition, not a
+      // real bit clock — skip it instead of collecting a bogus bit.
+      let isStopStart=false;
+      for(let j=i+1;j<Math.min(scl.length,i+300);j++){
+        if(scl[j]===0) break;
+        if(sda[j]===1 && sda[j-1]===0){ isStopStart=true; break; }
+      }
+      if(!isStopStart){
+        bits.push(sda[i]);
+        if(bits.length===9){ // 8 data + ack
+          out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits.slice(0,8))});
+          bits=[]; startPos=i+1;
+        }
       }
     }
   }
@@ -474,7 +502,7 @@ function decodeI2C(){
 function bitsToByte(bits){ let v=0; for(const b of bits) v=(v<<1)|b; return v; }
 
 function decodeUART(){
-  const buf=chByLabel('UART_TX').data;
+  const buf=busCh('UART','tx').data;
   const bitWidth=16, out=[];
   let i=0;
   while(i<buf.length-11*bitWidth){
@@ -742,24 +770,30 @@ function decodeAnnotationsFor(busName){ return state.decoded[busName]||[]; }
 function drawBusAnnotations(ctx, busName, rowTop, rowBottom){
   const items = decodeAnnotationsFor(busName);
   if(!items.length) return;
-  const y = rowTop+3, h=rowBottom-rowTop-6;
-  ctx.font='10px monospace'; ctx.textBaseline='middle';
+  const y = rowTop+2, h=rowBottom-rowTop-4;
+  ctx.font='bold 12px "Cascadia Code",Consolas,monospace'; ctx.textBaseline='middle';
+  let lastTextRight=-Infinity;
   for(const it of items){
     const x0=sampleToX(it.start), x1=sampleToX(it.end!==undefined?it.end:it.start+4);
     if(x1<0 || x0>waveCv.clientWidth) continue;
     const w=Math.max(2,x1-x0);
     let text='', col='#30363d';
-    if(busName==='SPI'){ text='M:'+it.mosi.toString(16).padStart(2,'0')+' S:'+it.miso.toString(16).padStart(2,'0'); col='#8957e5'; }
-    else if(busName==='UART'){ text='0x'+it.value.toString(16).padStart(2,'0'); col='#ff7b72'; }
+    if(busName==='SPI'){ text='M:'+it.mosi.toString(16).padStart(2,'0')+' S:'+it.miso.toString(16).padStart(2,'0'); col='#bc8cff'; }
+    else if(busName==='UART'){ text='0x'+it.value.toString(16).padStart(2,'0'); col='#ff9d97'; }
     else if(busName==='I2C'){
       if(it.type==='START'){ text='S'; col='#3fb950'; }
       else if(it.type==='STOP'){ text='P'; col='#f85149'; }
-      else { text='0x'+it.value.toString(16).padStart(2,'0'); col='#56d364'; }
+      else { text='0x'+it.value.toString(16).padStart(2,'0'); col='#7ee787'; }
     }
-    ctx.fillStyle=col+'33'; ctx.fillRect(x0,y,Math.max(w,14),h);
-    ctx.strokeStyle=col; ctx.strokeRect(x0+.5,y+.5,Math.max(w,14)-1,h-1);
-    ctx.fillStyle='#e6edf3';
-    ctx.fillText(text, x0+3, y+h/2);
+    const bw=Math.max(w,4);
+    ctx.fillStyle=col+'40'; ctx.fillRect(x0,y,bw,h);
+    ctx.strokeStyle=col+'99'; ctx.lineWidth=1; ctx.strokeRect(x0+.5,y+.5,bw-1,h-1);
+    if(x0>lastTextRight+2){
+      const textW = ctx.measureText(text).width;
+      ctx.fillStyle='#f0f6fc';
+      ctx.fillText(text, x0+4, y+h/2+1);
+      lastTextRight = x0+4+textW;
+    }
   }
 }
 
@@ -780,6 +814,7 @@ function draw(){
       waveCtx.fillText(row.bus, 6, row.y+row.h/2);
       waveCtx.strokeStyle='#1a1f26'; waveCtx.beginPath();
       waveCtx.moveTo(0,row.y+row.h+.5); waveCtx.lineTo(w,row.y+row.h+.5); waveCtx.stroke();
+      if(curBus) busRanges.push({bus:curBus,start:curBusStart,end:row.y});
       curBus=row.bus; curBusStart=row.y+row.h;
       continue;
     }
@@ -795,7 +830,7 @@ function draw(){
     waveCtx.moveTo(0,row.y+ROW_H+.5); waveCtx.lineTo(w,row.y+ROW_H+.5); waveCtx.stroke();
   }
   if(curBus && rows.length){ const lastRow=rows[rows.length-1]; busRanges.push({bus:curBus,start:curBusStart,end:lastRow.y+lastRow.h}); }
-  for(const br of busRanges){ if(state.decoded[br.bus]) drawBusAnnotations(waveCtx, br.bus, br.end-16, br.end); }
+  for(const br of busRanges){ if(state.decoded[br.bus]) drawBusAnnotations(waveCtx, br.bus, br.end-19, br.end); }
 
   drawCursor(waveCtx,'a','#ffa657', h);
   drawCursor(waveCtx,'b','#79c0ff', h);
@@ -1197,6 +1232,7 @@ function setGenChannelData(label,data){
   const ch = state.gen.channels.find(c=>c.label===label);
   if(ch) ch.data=data;
 }
+function setGenRole(bus,role,data){ setGenChannelData(state.busConfig[bus][role], data); }
 
 function logTerm(text, isError, isInfo){
   const el=document.getElementById('termLog');
@@ -1222,15 +1258,15 @@ function sendCommand(raw){
       const text = spaceIdx===-1 ? '' : line.slice(spaceIdx+1);
       if(!text) throw new Error('chybí text za "uart"');
       const {buf,length}=encodeUARTText(text);
-      setGenChannelData('UART_TX', buf);
+      setGenRole('UART','tx', buf);
       state.gen.totalSamples=length;
       logTerm('UART odesláno: "'+text+'" ('+text.length+' znaků)',false,true);
     } else if(kind==='spi'){
       const bytes=parts.slice(1).map(h=>parseInt(h,16)).filter(n=>!isNaN(n));
       if(!bytes.length) throw new Error('chybí hex bajty, např. "spi AA BB"');
       const {clk,mosi,cs,length}=encodeSPIBytes(bytes);
-      setGenChannelData('SPI_CLK',clk); setGenChannelData('SPI_MOSI',mosi); setGenChannelData('SPI_CS',cs);
-      setGenChannelData('SPI_MISO', new Uint8Array(length));
+      setGenRole('SPI','clk',clk); setGenRole('SPI','mosi',mosi); setGenRole('SPI','cs',cs);
+      setGenRole('SPI','miso', new Uint8Array(length));
       state.gen.totalSamples=length;
       logTerm('SPI odesláno: '+bytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(' '),false,true);
     } else if(kind==='i2c'){
@@ -1238,7 +1274,7 @@ function sendCommand(raw){
       if(hexes.length<1) throw new Error('chybí adresa, např. "i2c 50 01 02"');
       const addr=hexes[0], data=hexes.slice(1);
       const {scl,sda,length}=encodeI2CBytes(addr,data);
-      setGenChannelData('I2C_SCL',scl); setGenChannelData('I2C_SDA',sda);
+      setGenRole('I2C','scl',scl); setGenRole('I2C','sda',sda);
       state.gen.totalSamples=length;
       logTerm('I2C odesláno: adresa 0x'+addr.toString(16)+', data '+(data.map(b=>'0x'+b.toString(16)).join(' ')||'(žádná)'),false,true);
     } else {
@@ -1337,6 +1373,53 @@ function updateTriggerSummary(){
     st.textContent='⚡ Trigger: '+state.trigger.channel+'='+state.trigger.pattern+' (pretrig '+state.trigger.pretrigger+'%)';
   } else { s.textContent='Žádný trigger nastaven (spustí okamžitě).'; st.textContent=''; }
 }
+
+/* ============================================================
+   BUS CONFIG (assign which channel plays which role per bus)
+   ============================================================ */
+const DEFAULT_BUS_CONFIG = {
+  SPI:  {clk:'SPI_CLK', mosi:'SPI_MOSI', miso:'SPI_MISO', cs:'SPI_CS'},
+  I2C:  {scl:'I2C_SCL', sda:'I2C_SDA'},
+  UART: {tx:'UART_TX'},
+};
+function buildBusCfgForm(){
+  const body=document.getElementById('busCfgBody');
+  const labels = CHDEFS.map(c=>c.label);
+  const opts = labels.map(l=>`<option value="${l}">${l}</option>`).join('');
+  const parts=[];
+  for(const bus of Object.keys(state.busConfig)){
+    parts.push(`<div style="margin-bottom:6px;"><b style="font-size:11px;color:var(--text-dim);">${bus}</b></div>`);
+    for(const role of Object.keys(state.busConfig[bus])){
+      parts.push(`<label style="flex-direction:row; align-items:center; justify-content:space-between;">
+        <span style="text-transform:uppercase;">${role}</span>
+        <select data-bus="${bus}" data-role="${role}">${opts}</select>
+      </label>`);
+    }
+  }
+  body.innerHTML=parts.join('');
+  for(const bus of Object.keys(state.busConfig)){
+    for(const role of Object.keys(state.busConfig[bus])){
+      body.querySelector(`select[data-bus="${bus}"][data-role="${role}"]`).value = state.busConfig[bus][role];
+    }
+  }
+}
+document.getElementById('btnBusCfg').addEventListener('click', ()=>{
+  buildBusCfgForm();
+  document.getElementById('busPanel').classList.toggle('open');
+});
+document.getElementById('busApply').addEventListener('click', ()=>{
+  document.querySelectorAll('#busCfgBody select').forEach(sel=>{
+    state.busConfig[sel.dataset.bus][sel.dataset.role]=sel.value;
+  });
+  decodeAll(); draw();
+  document.getElementById('busPanel').classList.remove('open');
+  toast('Přiřazení sběrnic aktualizováno','good');
+});
+document.getElementById('busReset').addEventListener('click', ()=>{
+  state.busConfig = JSON.parse(JSON.stringify(DEFAULT_BUS_CONFIG));
+  buildBusCfgForm(); decodeAll(); draw();
+  toast('Vráceno na výchozí přiřazení');
+});
 
 /* ============================================================
    ROLL MODE
