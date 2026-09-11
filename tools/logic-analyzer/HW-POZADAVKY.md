@@ -84,6 +84,27 @@ na skoro libovolný pin).
 8 pinů obsazeno, **zbývá ~17 volných GPIO** na budoucí použití (stavové
 LED, reset/interrupt linka k FPGA, UART debug konzole, atd.).
 
+## Konektor pro ESP32↔FPGA komunikaci (určeno)
+
+**J8 dedikovaný čistě pro SPI-A (ESP32↔FPGA).** Na rozdíl od 16+16
+analyzer/generátor kanálů (které potřebují 5V stranu pro HUB75) je
+tohle nativní 3.3V↔3.3V spojení — **74HC245 na J8 se musí odstranit a
+přemostit** (stejná technika jako [Chubby Hat](https://hackaday.io/project/174032-chubby-hat)
+— přímý jumper, žádný optočlen/level-shift, není proč, obě strany
+jsou 3.3V).
+
+| J8 konektor pin | Signál |
+|---|---|
+| 1 | SCK |
+| 2 | MOSI |
+| 3 | MISO |
+| 5 | CS |
+| 4 nebo 16 | GND |
+
+Piny 6, 7 na J8 zůstávají volné (rezerva, např. interrupt/reset linka
+k FPGA). Zbylých 7 konektorů (J1–J7, 42 unikátních pinů) + 8 sdílených
+pinů zůstává pro 16+16 kanálový rozpočet — dostatečná rezerva.
+
 ## Otevřené otázky k tomuhle bodu
 
 - Typ optočlenu — **PC817 potvrzeně nestačí** (mezní frekvence
