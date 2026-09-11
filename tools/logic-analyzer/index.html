@@ -55,7 +55,7 @@
   /* ---------- layout ---------- */
   #main{flex:1; display:flex; overflow-y:auto; overflow-x:hidden; min-height:0;}
   #sidebar{
-    width:230px; min-width:230px; background:var(--panel); border-right:1px solid var(--border);
+    width:290px; min-width:290px; background:var(--panel); border-right:1px solid var(--border);
     display:flex; flex-direction:column;
   }
   #sidebar.collapsed{display:none;}
@@ -128,6 +128,10 @@
   #termInputRow .prompt{color:var(--good); font-family:monospace;}
   #termInput{flex:1; font-family:'Cascadia Code',Consolas,monospace; min-height:36px;}
 
+  .chrow .roleSel{
+    font-size:10px; background:var(--bg); color:var(--text-dim); border:1px solid var(--border);
+    border-radius:4px; padding:2px 3px; flex:none; width:76px;
+  }
   .chrow .level{
     font-size:9.5px; border-radius:4px; padding:2px 5px; border:1px solid var(--border); flex:none; cursor:pointer;
     background:var(--bg); color:var(--text-dim);
@@ -184,7 +188,6 @@
   <button id="btnCursors" title="Reset kurzorů">Kurzory</button>
   <div class="sep"></div>
   <button id="btnDecode" title="Panel dekódovaných sběrnic">&#9776; Dekódy</button>
-  <button id="btnBusCfg" title="Přiřazení kanálů ke sběrnicím">&#128268; Sběrnice…</button>
   <div class="spacer"></div>
   <button id="btnExport" title="Uložit záznam jako JSON">&#8595; Export</button>
   <input type="file" id="fileImport" accept=".json" style="display:none">
@@ -207,16 +210,6 @@
     <button id="trigClear">Zrušit trigger</button>
   </div>
   <div id="trigSummary" class="dimtext"></div>
-</div>
-
-<div id="busPanel" class="popover" style="width:340px;">
-  <h3>Přiřazení kanálů ke sběrnicím</h3>
-  <div id="busCfgBody"></div>
-  <div class="popoverRow">
-    <button id="busApply" class="primary">Použít</button>
-    <button id="busReset">Výchozí</button>
-  </div>
-  <div class="dimtext">Změní, který kanál dekodéry i generátor používají jako CLK/MOSI/SDA/atd. — nemusí to být kanál se stejným jménem.</div>
 </div>
 
 <div id="main">
@@ -449,8 +442,10 @@ function generateTestData(){
    DECODERS
    ============================================================ */
 function busCh(bus,role){ return chByLabel(state.busConfig[bus][role]); }
+function busChsReady(bus,roles){ return roles.every(r=>busCh(bus,r)); }
 
 function decodeSPI(){
+  if(!busChsReady('SPI',['clk','mosi','miso','cs'])) return [];
   const clk=busCh('SPI','clk').data, mosi=busCh('SPI','mosi').data,
         miso=busCh('SPI','miso').data, cs=busCh('SPI','cs').data;
   const out=[];
@@ -470,6 +465,7 @@ function decodeSPI(){
 }
 
 function decodeI2C(){
+  if(!busChsReady('I2C',['scl','sda'])) return [];
   const scl=busCh('I2C','scl').data, sda=busCh('I2C','sda').data;
   const out=[];
   let bits=[], collecting=false, startPos=0;
@@ -502,6 +498,7 @@ function decodeI2C(){
 function bitsToByte(bits){ let v=0; for(const b of bits) v=(v<<1)|b; return v; }
 
 function decodeUART(){
+  if(!busChsReady('UART',['tx'])) return [];
   const buf=busCh('UART','tx').data;
   const bitWidth=16, out=[];
   let i=0;
@@ -526,6 +523,37 @@ function decodeAll(){
 }
 
 /* ============================================================
+   PER-CHANNEL ROLE ASSIGNMENT (which bus role a channel plays)
+   ============================================================ */
+const ROLE_OPTIONS = [
+  {key:'', label:'—'},
+  {key:'SPI:clk', label:'SPI CLK', group:'SPI'}, {key:'SPI:mosi', label:'MOSI', group:'SPI'},
+  {key:'SPI:miso', label:'MISO', group:'SPI'}, {key:'SPI:cs', label:'CS', group:'SPI'},
+  {key:'I2C:scl', label:'I2C SCL', group:'I2C'}, {key:'I2C:sda', label:'SDA', group:'I2C'},
+  {key:'UART:tx', label:'UART TX', group:'UART'},
+];
+function roleKeyForChannel(label){
+  for(const bus of Object.keys(state.busConfig)){
+    for(const role of Object.keys(state.busConfig[bus])){
+      if(state.busConfig[bus][role]===label) return bus+':'+role;
+    }
+  }
+  return '';
+}
+function setChannelRole(label, roleKey){
+  for(const bus of Object.keys(state.busConfig)){
+    for(const role of Object.keys(state.busConfig[bus])){
+      if(state.busConfig[bus][role]===label) state.busConfig[bus][role]=null;
+    }
+  }
+  if(roleKey){
+    const [bus,role]=roleKey.split(':');
+    state.busConfig[bus][role]=label;
+  }
+  decodeAll(); draw();
+}
+
+/* ============================================================
    SIDEBAR
    ============================================================ */
 const chlistEl = document.getElementById('chlist');
@@ -544,10 +572,14 @@ function buildSidebar(){
     const row=document.createElement('div');
     row.className='chrow'+(ch.visible?'':' dim');
     const lvl = ch.level||'5V';
+    const curRole = roleKeyForChannel(ch.label);
     row.innerHTML=`
       <input type="checkbox" ${ch.visible?'checked':''}>
       <span class="swatch" style="background:${ch.color}"></span>
       <input class="lbl" type="text" value="${ch.label}">
+      <select class="roleSel" title="Role kanálu na sběrnici (CLK/MOSI/SDA/…)">
+        ${ROLE_OPTIONS.map(o=>`<option value="${o.key}" ${o.key===curRole?'selected':''}>${o.label}</option>`).join('')}
+      </select>
       <span class="level ${lvl==='3.3V'?'v33':'v5'}" title="Klik = přepnout výstupní úroveň (jen popisek, HW zatím neřídí)">${lvl}</span>
     `;
     const cb=row.querySelector('input[type=checkbox]');
@@ -555,6 +587,13 @@ function buildSidebar(){
     const lbl=row.querySelector('.lbl');
     lbl.addEventListener('input',()=>{ ch.label=lbl.value; draw(); });
     lbl.addEventListener('click',e=>e.stopPropagation());
+    const roleSel=row.querySelector('.roleSel');
+    roleSel.addEventListener('click',e=>e.stopPropagation());
+    roleSel.addEventListener('change',()=>{
+      setChannelRole(ch.label, roleSel.value);
+      buildSidebar();
+      toast(roleSel.value ? (ch.label+' → '+roleSel.options[roleSel.selectedIndex].text) : (ch.label+' odebrán ze sběrnice'));
+    });
     const lvlEl=row.querySelector('.level');
     lvlEl.addEventListener('click',e=>{
       e.stopPropagation();
@@ -1232,7 +1271,11 @@ function setGenChannelData(label,data){
   const ch = state.gen.channels.find(c=>c.label===label);
   if(ch) ch.data=data;
 }
-function setGenRole(bus,role,data){ setGenChannelData(state.busConfig[bus][role], data); }
+function setGenRole(bus,role,data){
+  const label=state.busConfig[bus][role];
+  if(!label) throw new Error(bus+' role "'+role+'" nemá přiřazený žádný kanál (nastavte to v seznamu kanálů vlevo)');
+  setGenChannelData(label, data);
+}
 
 function logTerm(text, isError, isInfo){
   const el=document.getElementById('termLog');
@@ -1373,53 +1416,6 @@ function updateTriggerSummary(){
     st.textContent='⚡ Trigger: '+state.trigger.channel+'='+state.trigger.pattern+' (pretrig '+state.trigger.pretrigger+'%)';
   } else { s.textContent='Žádný trigger nastaven (spustí okamžitě).'; st.textContent=''; }
 }
-
-/* ============================================================
-   BUS CONFIG (assign which channel plays which role per bus)
-   ============================================================ */
-const DEFAULT_BUS_CONFIG = {
-  SPI:  {clk:'SPI_CLK', mosi:'SPI_MOSI', miso:'SPI_MISO', cs:'SPI_CS'},
-  I2C:  {scl:'I2C_SCL', sda:'I2C_SDA'},
-  UART: {tx:'UART_TX'},
-};
-function buildBusCfgForm(){
-  const body=document.getElementById('busCfgBody');
-  const labels = CHDEFS.map(c=>c.label);
-  const opts = labels.map(l=>`<option value="${l}">${l}</option>`).join('');
-  const parts=[];
-  for(const bus of Object.keys(state.busConfig)){
-    parts.push(`<div style="margin-bottom:6px;"><b style="font-size:11px;color:var(--text-dim);">${bus}</b></div>`);
-    for(const role of Object.keys(state.busConfig[bus])){
-      parts.push(`<label style="flex-direction:row; align-items:center; justify-content:space-between;">
-        <span style="text-transform:uppercase;">${role}</span>
-        <select data-bus="${bus}" data-role="${role}">${opts}</select>
-      </label>`);
-    }
-  }
-  body.innerHTML=parts.join('');
-  for(const bus of Object.keys(state.busConfig)){
-    for(const role of Object.keys(state.busConfig[bus])){
-      body.querySelector(`select[data-bus="${bus}"][data-role="${role}"]`).value = state.busConfig[bus][role];
-    }
-  }
-}
-document.getElementById('btnBusCfg').addEventListener('click', ()=>{
-  buildBusCfgForm();
-  document.getElementById('busPanel').classList.toggle('open');
-});
-document.getElementById('busApply').addEventListener('click', ()=>{
-  document.querySelectorAll('#busCfgBody select').forEach(sel=>{
-    state.busConfig[sel.dataset.bus][sel.dataset.role]=sel.value;
-  });
-  decodeAll(); draw();
-  document.getElementById('busPanel').classList.remove('open');
-  toast('Přiřazení sběrnic aktualizováno','good');
-});
-document.getElementById('busReset').addEventListener('click', ()=>{
-  state.busConfig = JSON.parse(JSON.stringify(DEFAULT_BUS_CONFIG));
-  buildBusCfgForm(); decodeAll(); draw();
-  toast('Vráceno na výchozí přiřazení');
-});
 
 /* ============================================================
    ROLL MODE
