@@ -50,6 +50,40 @@ Aplikace dnes má u každého kanálu jen **popisek** 5V/3.3V (viz
   limitující faktor R_on × C_load, ne přímo frekvence, ale **ověřit
   konkrétní datasheet**, než se to navrhne do schématu.
 
+## ESP32 zapojení (určeno) — ESP32-WROOM-32 DevKit V1, 30 pin
+
+30pin varianta vyvádí 25 použitelných GPIO (zdroj:
+[electricalflux.com](https://electricalflux.com/mcu-general/esp32-wroom-32-pinout-explained-safe-gpios)) —
+dost na dvě nezávislé SPI sběrnice (FPGA + SD karta) beze změny na
+sdílených pinech, díky GPIO matici ESP32 (libovolný periferní signál
+na skoro libovolný pin).
+
+**SPI-A — ESP32 ↔ FPGA (přes HSPI řadič):**
+
+| Signál | GPIO |
+|---|---|
+| SCK  | 14 |
+| MOSI | 27 |
+| MISO | 34 *(input-only pin — MISO je vždy jen vstup do ESP32, sedí ideálně)* |
+| CS   | 26 |
+
+**SPI-B — ESP32 ↔ MicroSD modul (přes VSPI řadič):**
+
+| Signál | GPIO |
+|---|---|
+| SCK  | 18 |
+| MOSI | 23 |
+| MISO | 19 |
+| CS   | 5  *(strapping pin — funguje v praxi běžně jako výchozí VSPI CS, ale ověřit chování při bootu)* |
+
+**Vynechané/rizikové piny (nepoužívat pro nic obecného):**
+- GPIO6–11 — interní flash, nepoužitelné.
+- GPIO0, 2, 12, 15 — strapping piny (ovlivňují boot mód), GPIO5 výše je jediný použitý s výhradou.
+- GPIO34–39 — jen vstup, nelze na ně vyvést výstupní signál (proto MISO na GPIO34, ne CS/SCK/MOSI).
+
+8 pinů obsazeno, **zbývá ~17 volných GPIO** na budoucí použití (stavové
+LED, reset/interrupt linka k FPGA, UART debug konzole, atd.).
+
 ## Otevřené otázky k tomuhle bodu
 
 - Typ optočlenu — **PC817 potvrzeně nestačí** (mezní frekvence
