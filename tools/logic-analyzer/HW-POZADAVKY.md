@@ -21,12 +21,37 @@ konektory** (J1-J8) místo přímého připojení LED panelů. Řeší:
 3. **ESP32 přímo na téhle desce** — ne na samostatném prototypu,
    rovnou součást interposeru.
 
+## Kanálový rozpočet (určeno)
+
+**16 vstupních + 16 výstupních = 32 datových kanálů celkem.** Z 56
+dostupných HUB75 pinů (viz
+[../../docs/hub75-konektory-piny.md](../../docs/hub75-konektory-piny.md))
+zbývá 24 volných — dost rezervy na SPI/SD linky k ESP32 a další
+řídicí signály. Rozdělení 32 kanálů nemusí kopírovat hranice
+konektorů J1-J8 (na interposer desce se stejně vše přesměruje přes
+vlastní optočleny/přepínače) — je to skutečně volný výběr 16+16 z
+dostupných pinů.
+
+## Přepínání úrovně/směru per kanál
+
+Aplikace dnes má u každého kanálu jen **popisek** 5V/3.3V (viz
+`tools/logic-analyzer/index.html`) — žádné skutečné řízení HW. Pro
+32 kanálů, kde by se úroveň/směr měl dát reálně přepínat, dává smysl:
+
+- **Analogový přepínač na kanál** (např. `74HC4066` — 4× obousměrný
+  spínač na jednom čipu, 8 čipů pokryje 32 kanálů), který volí mezi
+  "přímá 3.3V cesta" a "cesta přes level shift/optočlen na 5V".
+- **Řízení přes I2C GPIO expandér**, ne přímo z FPGA/ESP32 pinů — např.
+  2× `PCF8575` (16bit každý) dá dohromady 32 řídicích bitů po **jen
+  2 vodičích (I2C)**. Bez tohohle by 32 přepínačů žralo 32 pinů
+  navíc, což by smysl nedávalo.
+- Nutno ověřit, jestli `74HC4066` (nebo obdoba) zvládne rychlosti,
+  co plánujeme (jednotky MHz) — u analogových CMOS spínačů bývá
+  limitující faktor R_on × C_load, ne přímo frekvence, ale **ověřit
+  konkrétní datasheet**, než se to navrhne do schématu.
+
 ## Otevřené otázky k tomuhle bodu
 
-- Kolik z 8 HUB75 konektorů bude výstupních vs. vstupních? (Zatím
-  neurčeno — "polovinu 245" naznačuje 6 čipů/6 kanálů datových
-  linek na jednu stranu, 6 na druhou, ale přesné rozdělení podle
-  konektorů J1-J8 potřeba ještě navrhnout.)
 - Typ optočlenu — rychlost (SPI/vzorkovací hodiny budou v jednotkách
   MHz, běžné levné optočleny typu PC817 na to nestačí, potřeba
   rychlé, např. 6N137 / HCPL-0630 řady nebo podobné — **ověřit, co
@@ -58,9 +83,11 @@ konektory** (J1-J8) místo přímého připojení LED panelů. Řeší:
 
 ## Co chybí, než se dá cokoliv navrhnout do schématu
 
-1. Rozhodnout přesné rozdělení 8 konektorů na vstupní/výstupní skupinu.
+1. Vybrat, kterých 16+16 konkrétních pinů z 56 dostupných použít.
 2. Zjistit skutečný typ dostupných optočlenů (rychlost musí stačit
    na zamýšlené vzorkovací frekvence).
-3. Zvolit step-up měnič a UVLO obvod (konkrétní součástky).
-4. Zvolit nabíjecí obvod a typ jacku.
-5. Teprve pak má smysl kreslit schéma/PCB.
+3. Ověřit rychlost `74HC4066` (nebo alternativy) pro přepínání úrovně
+   per kanál, a dostupnost `PCF8575`/obdoby pro I2C řízení 32 bitů.
+4. Zvolit step-up měnič a UVLO obvod (konkrétní součástky).
+5. Zvolit nabíjecí obvod a typ jacku.
+6. Teprve pak má smysl kreslit schéma/PCB.
