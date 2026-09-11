@@ -52,10 +52,11 @@ Aplikace dnes má u každého kanálu jen **popisek** 5V/3.3V (viz
 
 ## Otevřené otázky k tomuhle bodu
 
-- Typ optočlenu — rychlost (SPI/vzorkovací hodiny budou v jednotkách
-  MHz, běžné levné optočleny typu PC817 na to nestačí, potřeba
-  rychlé, např. 6N137 / HCPL-0630 řady nebo podobné — **ověřit, co
-  přesně je na skladě**).
+- Typ optočlenu — **PC817 potvrzeně nestačí** (mezní frekvence
+  ~80 kHz, rise/fall ~18 µs — na I2C 100 kHz těsně pod limitem, na
+  SPI/MHz vzorkování zcela nedostatečné). Potřeba rychlejší typ,
+  např. **6N137 / HCPL-0630** řady (desítky Mbit/s) — **dokoupit**,
+  na skladě je jen PC817.
 - Přesné schéma zapojení DIR/OE na vyměněné straně (viz
   [ARCHITEKTURA.md](ARCHITEKTURA.md) — DIR na SN74CBT3245A neexistuje,
   jen OE).
