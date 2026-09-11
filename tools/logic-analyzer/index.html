@@ -55,7 +55,7 @@
   /* ---------- layout ---------- */
   #main{flex:1; display:flex; overflow-y:auto; overflow-x:hidden; min-height:0;}
   #sidebar{
-    width:290px; min-width:290px; background:var(--panel); border-right:1px solid var(--border);
+    width:320px; min-width:320px; background:var(--panel); border-right:1px solid var(--border);
     display:flex; flex-direction:column;
   }
   #sidebar.collapsed{display:none;}
@@ -128,6 +128,11 @@
   #termInputRow .prompt{color:var(--good); font-family:monospace;}
   #termInput{flex:1; font-family:'Cascadia Code',Consolas,monospace; min-height:36px;}
 
+  .chrow .gearBtn{
+    background:transparent; color:var(--text-dim); border:none; font-size:13px; cursor:pointer;
+    flex:none; min-height:auto; padding:2px 4px;
+  }
+  .chrow .gearBtn:hover{ color:var(--accent); }
   .chrow .roleSel{
     font-size:10px; background:var(--bg); color:var(--text-dim); border:1px solid var(--border);
     border-radius:4px; padding:2px 3px; flex:none; width:76px;
@@ -212,6 +217,36 @@
   <div id="trigSummary" class="dimtext"></div>
 </div>
 
+<div id="busSettingsPanel" class="popover">
+  <h3 id="busSettingsTitle">Nastavení sběrnice</h3>
+  <label>Název
+    <input type="text" id="bsName">
+  </label>
+  <label>Rychlost (vzorků na bit) — nižší = rychlejší
+    <input type="number" id="bsBitWidth" min="2" max="10000">
+  </label>
+  <label id="bsDataBitsRow">Počet datových bitů
+    <select id="bsDataBits">
+      <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+      <option value="8">8</option><option value="9">9</option>
+    </select>
+  </label>
+  <label id="bsStopBitsRow">Stop bity (UART)
+    <select id="bsStopBits">
+      <option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option>
+    </select>
+  </label>
+  <label id="bsParityRow">Parita (UART)
+    <select id="bsParity">
+      <option value="none">žádná</option><option value="even">sudá</option><option value="odd">lichá</option>
+    </select>
+  </label>
+  <div class="popoverRow">
+    <button id="bsApply" class="primary">Použít</button>
+    <button id="bsRemove">Odebrat sběrnici</button>
+  </div>
+</div>
+
 <div id="main">
   <aside id="sidebar">
     <div id="sidebarHead">Kanály (16)</div>
@@ -263,26 +298,33 @@ const ROW_H  = 34;
 const RULER_H = 30;
 
 const CHDEFS = [
-  {label:'CLK',      color:'#f0883e', bus:null},
-  {label:'CNT0',     color:'#a5d6ff', bus:'COUNTER'},
-  {label:'CNT1',     color:'#79c0ff', bus:'COUNTER'},
-  {label:'CNT2',     color:'#56d4dd', bus:'COUNTER'},
-  {label:'CNT3',     color:'#39c5cf', bus:'COUNTER'},
-  {label:'PWM1',     color:'#ffa657', bus:null},
-  {label:'PWM2',     color:'#ffcb7a', bus:null},
-  {label:'SPI_CLK',  color:'#d2a8ff', bus:'SPI'},
-  {label:'SPI_MOSI', color:'#bc8cff', bus:'SPI'},
-  {label:'SPI_MISO', color:'#a371f7', bus:'SPI'},
-  {label:'SPI_CS',   color:'#8957e5', bus:'SPI'},
-  {label:'I2C_SCL',  color:'#7ee787', bus:'I2C'},
-  {label:'I2C_SDA',  color:'#56d364', bus:'I2C'},
-  {label:'UART_TX',  color:'#ff7b72', bus:'UART'},
-  {label:'RAND1',    color:'#f778ba', bus:null},
-  {label:'RAND2',    color:'#db61a2', bus:null},
+  {label:'CLK',      color:'#f0883e', staticBus:null},
+  {label:'CNT0',     color:'#a5d6ff', staticBus:'COUNTER'},
+  {label:'CNT1',     color:'#79c0ff', staticBus:'COUNTER'},
+  {label:'CNT2',     color:'#56d4dd', staticBus:'COUNTER'},
+  {label:'CNT3',     color:'#39c5cf', staticBus:'COUNTER'},
+  {label:'PWM1',     color:'#ffa657', staticBus:null},
+  {label:'PWM2',     color:'#ffcb7a', staticBus:null},
+  {label:'SPI_CLK',  color:'#d2a8ff', staticBus:null},
+  {label:'SPI_MOSI', color:'#bc8cff', staticBus:null},
+  {label:'SPI_MISO', color:'#a371f7', staticBus:null},
+  {label:'SPI_CS',   color:'#8957e5', staticBus:null},
+  {label:'I2C_SCL',  color:'#7ee787', staticBus:null},
+  {label:'I2C_SDA',  color:'#56d364', staticBus:null},
+  {label:'UART_TX',  color:'#ff7b72', staticBus:null},
+  {label:'RAND1',    color:'#f778ba', staticBus:null},
+  {label:'RAND2',    color:'#db61a2', staticBus:null},
 ];
 
+const ROLE_SEQUENCE = {
+  SPI:  ['clk','mosi','miso','cs'],
+  I2C:  ['scl','sda'],
+  UART: ['tx'],
+};
+const ROLE_LABELS = {clk:'CLK',mosi:'MOSI',miso:'MISO',cs:'CS',scl:'SCL',sda:'SDA',tx:'TX'};
+
 const state = {
-  channels: CHDEFS.map((c,i)=>({...c, id:i, visible:true, data:new Uint8Array(TOTAL_SAMPLES)})),
+  channels: CHDEFS.map((c,i)=>({...c, id:i, bus:c.staticBus, visible:true, data:new Uint8Array(TOTAL_SAMPLES)})),
   sampleRate: SAMPLE_RATE,
   totalSamples: TOTAL_SAMPLES,
   view: {start:0, sPerPx:1},
@@ -291,14 +333,64 @@ const state = {
   trigger: null,
   drag: null,           // {mode:'pan'|'cursor', ...}
   pinch: null,
-  decoded: {SPI:[], I2C:[], UART:[]},
+  decoded: {},           // keyed by instance id, e.g. decoded.SPI1
   mode: 'analyzer',
-  busConfig: {
-    SPI:  {clk:'SPI_CLK', mosi:'SPI_MOSI', miso:'SPI_MISO', cs:'SPI_CS'},
-    I2C:  {scl:'I2C_SCL', sda:'I2C_SDA'},
-    UART: {tx:'UART_TX'},
-  },
+  busInstances: [],      // [{id,type,name,channels:{role:label},bitWidth,dataBits,stopBits,parity}]
 };
+
+function defaultBusInstances(){
+  return [
+    {id:'SPI1',  type:'SPI',  name:'SPI 1',  channels:{clk:'SPI_CLK',mosi:'SPI_MOSI',miso:'SPI_MISO',cs:'SPI_CS'}, bitWidth:20, dataBits:8},
+    {id:'I2C1',  type:'I2C',  name:'I2C 1',  channels:{scl:'I2C_SCL',sda:'I2C_SDA'}, bitWidth:40, dataBits:8},
+    {id:'UART1', type:'UART', name:'UART 1', channels:{tx:'UART_TX'}, bitWidth:16, dataBits:8, stopBits:2, parity:'none'},
+  ];
+}
+function nextInstanceId(type){
+  let n=1;
+  while(state.busInstances.some(b=>b.id===type+n)) n++;
+  return type+n;
+}
+function findInstance(id){ return state.busInstances.find(b=>b.id===id); }
+function instanceForChannel(label){
+  return state.busInstances.find(b=>Object.values(b.channels).includes(label));
+}
+function roleOfChannelInInstance(inst,label){
+  return Object.keys(inst.channels).find(r=>inst.channels[r]===label);
+}
+function syncChannelBusTags(){
+  for(const chset of [state.analyzer && state.analyzer.channels, state.gen && state.gen.channels]){
+    if(!chset) continue;
+    for(const ch of chset){
+      const inst=instanceForChannel(ch.label);
+      ch.bus = inst ? inst.id : (CHDEFS[ch.id] ? CHDEFS[ch.id].staticBus : null);
+    }
+  }
+}
+function clearChannelAssignment(label, exceptInstId){
+  for(const inst of state.busInstances){
+    if(inst.id===exceptInstId) continue;
+    for(const role of Object.keys(inst.channels)){
+      if(inst.channels[role]===label) inst.channels[role]=null;
+    }
+  }
+}
+function pruneEmptyInstances(){
+  state.busInstances = state.busInstances.filter(inst=>Object.values(inst.channels).some(v=>v));
+}
+function removeChannelFromInstances(label){
+  clearChannelAssignment(label);
+  pruneEmptyInstances();
+}
+function assignChannelToRole(label, instId, role){
+  // Clear this channel's old slot first, but don't prune yet — the
+  // target instance may still look "empty" until we set its role below,
+  // and pruning too early would delete a freshly-created instance.
+  clearChannelAssignment(label, instId);
+  const inst=findInstance(instId);
+  if(inst) inst.channels[role]=label;
+  pruneEmptyInstances();
+  syncChannelBusTags();
+}
 
 /* ============================================================
    TEST DATA GENERATORS
@@ -439,22 +531,22 @@ function generateTestData(){
 }
 
 /* ============================================================
-   DECODERS
+   DECODERS — generic, parameterized by a bus instance
    ============================================================ */
-function busCh(bus,role){ return chByLabel(state.busConfig[bus][role]); }
-function busChsReady(bus,roles){ return roles.every(r=>busCh(bus,r)); }
+function instChsReady(inst,roles){ return roles.every(r=>inst.channels[r] && chByLabel(inst.channels[r])); }
 
-function decodeSPI(){
-  if(!busChsReady('SPI',['clk','mosi','miso','cs'])) return [];
-  const clk=busCh('SPI','clk').data, mosi=busCh('SPI','mosi').data,
-        miso=busCh('SPI','miso').data, cs=busCh('SPI','cs').data;
+function decodeSPIInst(inst){
+  if(!instChsReady(inst,['clk','mosi','miso','cs'])) return [];
+  const clk=chByLabel(inst.channels.clk).data, mosi=chByLabel(inst.channels.mosi).data,
+        miso=chByLabel(inst.channels.miso).data, cs=chByLabel(inst.channels.cs).data;
+  const nBits=inst.dataBits||8;
   const out=[];
   let inTx=false, txStart=0, bitCount=0, mVal=0, sVal=0;
   for(let i=1;i<clk.length;i++){
     if(cs[i]===0 && cs[i-1]===1){ inTx=true; txStart=i; bitCount=0; mVal=0; sVal=0; }
     if(inTx && clk[i]===1 && clk[i-1]===0){ // rising edge = sample
       mVal=(mVal<<1)|mosi[i]; sVal=(sVal<<1)|miso[i]; bitCount++;
-      if(bitCount===8){
+      if(bitCount===nBits){
         out.push({start:txStart,end:i,mosi:mVal,miso:sVal});
         bitCount=0; mVal=0; sVal=0; txStart=i+1;
       }
@@ -464,9 +556,10 @@ function decodeSPI(){
   return out;
 }
 
-function decodeI2C(){
-  if(!busChsReady('I2C',['scl','sda'])) return [];
-  const scl=busCh('I2C','scl').data, sda=busCh('I2C','sda').data;
+function decodeI2CInst(inst){
+  if(!instChsReady(inst,['scl','sda'])) return [];
+  const scl=chByLabel(inst.channels.scl).data, sda=chByLabel(inst.channels.sda).data;
+  const nBits=(inst.dataBits||8)+1; // +1 ack
   const out=[];
   let bits=[], collecting=false, startPos=0;
   for(let i=1;i<scl.length;i++){
@@ -486,8 +579,8 @@ function decodeI2C(){
       }
       if(!isStopStart){
         bits.push(sda[i]);
-        if(bits.length===9){ // 8 data + ack
-          out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits.slice(0,8))});
+        if(bits.length===nBits){
+          out.push({start:startPos,end:i,type:'BYTE',value:bitsToByte(bits.slice(0,nBits-1))});
           bits=[]; startPos=i+1;
         }
       }
@@ -497,17 +590,17 @@ function decodeI2C(){
 }
 function bitsToByte(bits){ let v=0; for(const b of bits) v=(v<<1)|b; return v; }
 
-function decodeUART(){
-  if(!busChsReady('UART',['tx'])) return [];
-  const buf=busCh('UART','tx').data;
-  const bitWidth=16, out=[];
+function decodeUARTInst(inst){
+  if(!instChsReady(inst,['tx'])) return [];
+  const buf=chByLabel(inst.channels.tx).data;
+  const bitWidth=inst.bitWidth||16, dataBits=inst.dataBits||8, out=[];
   let i=0;
-  while(i<buf.length-11*bitWidth){
+  while(i<buf.length-(dataBits+3)*bitWidth){
     if(buf[i]===1 && buf[i+1]===0){
       const start=i+1;
       let sampleAt=start+Math.floor(bitWidth*1.5);
       let val=0;
-      for(let b=0;b<8;b++){ val |= (buf[sampleAt]&1)<<b; sampleAt+=bitWidth; }
+      for(let b=0;b<dataBits;b++){ val |= (buf[sampleAt]&1)<<b; sampleAt+=bitWidth; }
       out.push({start:i,end:sampleAt,value:val});
       i=sampleAt+bitWidth;
     } else i++;
@@ -516,41 +609,51 @@ function decodeUART(){
 }
 
 function decodeAll(){
-  state.decoded.SPI = decodeSPI();
-  state.decoded.I2C = decodeI2C();
-  state.decoded.UART = decodeUART();
+  const decoded={};
+  for(const inst of state.busInstances){
+    if(inst.type==='SPI') decoded[inst.id]=decodeSPIInst(inst);
+    else if(inst.type==='I2C') decoded[inst.id]=decodeI2CInst(inst);
+    else if(inst.type==='UART') decoded[inst.id]=decodeUARTInst(inst);
+  }
+  state.decoded=decoded;
   renderDecodeList();
 }
 
 /* ============================================================
-   PER-CHANNEL ROLE ASSIGNMENT (which bus role a channel plays)
+   PER-CHANNEL ROLE ASSIGNMENT (instance-aware, multiple buses of
+   the same type supported — e.g. several independent UARTs)
    ============================================================ */
-const ROLE_OPTIONS = [
-  {key:'', label:'—'},
-  {key:'SPI:clk', label:'SPI CLK', group:'SPI'}, {key:'SPI:mosi', label:'MOSI', group:'SPI'},
-  {key:'SPI:miso', label:'MISO', group:'SPI'}, {key:'SPI:cs', label:'CS', group:'SPI'},
-  {key:'I2C:scl', label:'I2C SCL', group:'I2C'}, {key:'I2C:sda', label:'SDA', group:'I2C'},
-  {key:'UART:tx', label:'UART TX', group:'UART'},
-];
-function roleKeyForChannel(label){
-  for(const bus of Object.keys(state.busConfig)){
-    for(const role of Object.keys(state.busConfig[bus])){
-      if(state.busConfig[bus][role]===label) return bus+':'+role;
+function buildRoleOptionsFor(label){
+  const opts=[{key:'',label:'—'}];
+  const curInst=instanceForChannel(label);
+  for(const inst of state.busInstances){
+    for(const role of ROLE_SEQUENCE[inst.type]){
+      const holder=inst.channels[role];
+      if(holder && holder!==label) continue; // taken by another channel
+      opts.push({key:inst.id+':'+role, label:inst.name+' '+ROLE_LABELS[role]});
     }
   }
-  return '';
+  for(const type of Object.keys(ROLE_SEQUENCE)){
+    opts.push({key:'new:'+type, label:'+ Nová '+type+' sběrnice'});
+  }
+  void curInst;
+  return opts;
 }
-function setChannelRole(label, roleKey){
-  for(const bus of Object.keys(state.busConfig)){
-    for(const role of Object.keys(state.busConfig[bus])){
-      if(state.busConfig[bus][role]===label) state.busConfig[bus][role]=null;
-    }
+function applyRoleSelection(label, value){
+  if(value==='' ){ removeChannelFromInstances(label); syncChannelBusTags(); }
+  else if(value.startsWith('new:')){
+    const type=value.slice(4);
+    const inst={id:nextInstanceId(type), type, name:type+' '+nextInstanceId(type).replace(type,''),
+      channels:Object.fromEntries(ROLE_SEQUENCE[type].map(r=>[r,null])),
+      bitWidth: type==='I2C'?40:(type==='UART'?16:20), dataBits:8};
+    if(type==='UART'){ inst.stopBits=2; inst.parity='none'; }
+    state.busInstances.push(inst);
+    assignChannelToRole(label, inst.id, ROLE_SEQUENCE[type][0]);
+  } else {
+    const idx=value.indexOf(':');
+    assignChannelToRole(label, value.slice(0,idx), value.slice(idx+1));
   }
-  if(roleKey){
-    const [bus,role]=roleKey.split(':');
-    state.busConfig[bus][role]=label;
-  }
-  decodeAll(); draw();
+  decodeAll();
 }
 
 /* ============================================================
@@ -558,28 +661,32 @@ function setChannelRole(label, roleKey){
    ============================================================ */
 const chlistEl = document.getElementById('chlist');
 function buildSidebar(){
+  syncChannelBusTags();
   chlistEl.innerHTML='';
   let lastBus=undefined;
   for(const ch of state.channels){
     if(ch.bus!==lastBus){
       lastBus=ch.bus;
       if(ch.bus){
+        const inst=findInstance(ch.bus);
         const h=document.createElement('div');
-        h.className='chrow bushead'; h.textContent=ch.bus;
+        h.className='chrow bushead'; h.textContent=inst?inst.name:ch.bus;
         chlistEl.appendChild(h);
       }
     }
     const row=document.createElement('div');
     row.className='chrow'+(ch.visible?'':' dim');
     const lvl = ch.level||'5V';
-    const curRole = roleKeyForChannel(ch.label);
+    const curInst=instanceForChannel(ch.label);
+    const curRole = curInst ? curInst.id+':'+roleOfChannelInInstance(curInst,ch.label) : '';
     row.innerHTML=`
       <input type="checkbox" ${ch.visible?'checked':''}>
       <span class="swatch" style="background:${ch.color}"></span>
       <input class="lbl" type="text" value="${ch.label}">
       <select class="roleSel" title="Role kanálu na sběrnici (CLK/MOSI/SDA/…)">
-        ${ROLE_OPTIONS.map(o=>`<option value="${o.key}" ${o.key===curRole?'selected':''}>${o.label}</option>`).join('')}
+        ${buildRoleOptionsFor(ch.label).map(o=>`<option value="${o.key}" ${o.key===curRole?'selected':''}>${o.label}</option>`).join('')}
       </select>
+      ${curInst?'<button class="gearBtn" title="Nastavení '+curInst.name+' (rychlost, bity…)">&#9881;</button>':''}
       <span class="level ${lvl==='3.3V'?'v33':'v5'}" title="Klik = přepnout výstupní úroveň (jen popisek, HW zatím neřídí)">${lvl}</span>
     `;
     const cb=row.querySelector('input[type=checkbox]');
@@ -590,10 +697,13 @@ function buildSidebar(){
     const roleSel=row.querySelector('.roleSel');
     roleSel.addEventListener('click',e=>e.stopPropagation());
     roleSel.addEventListener('change',()=>{
-      setChannelRole(ch.label, roleSel.value);
-      buildSidebar();
-      toast(roleSel.value ? (ch.label+' → '+roleSel.options[roleSel.selectedIndex].text) : (ch.label+' odebrán ze sběrnice'));
+      const text=roleSel.options[roleSel.selectedIndex].text;
+      applyRoleSelection(ch.label, roleSel.value);
+      buildSidebar(); resizeCanvases(); draw();
+      toast(roleSel.value ? (ch.label+' → '+text) : (ch.label+' odebrán ze sběrnice'));
     });
+    const gearBtn=row.querySelector('.gearBtn');
+    if(gearBtn) gearBtn.addEventListener('click', e=>{ e.stopPropagation(); openBusSettings(curInst.id); });
     const lvlEl=row.querySelector('.level');
     lvlEl.addEventListener('click',e=>{
       e.stopPropagation();
@@ -809,6 +919,7 @@ function decodeAnnotationsFor(busName){ return state.decoded[busName]||[]; }
 function drawBusAnnotations(ctx, busName, rowTop, rowBottom){
   const items = decodeAnnotationsFor(busName);
   if(!items.length) return;
+  const instType = (findInstance(busName)||{}).type;
   const y = rowTop+2, h=rowBottom-rowTop-4;
   ctx.font='bold 12px "Cascadia Code",Consolas,monospace'; ctx.textBaseline='middle';
   let lastTextRight=-Infinity;
@@ -817,9 +928,9 @@ function drawBusAnnotations(ctx, busName, rowTop, rowBottom){
     if(x1<0 || x0>waveCv.clientWidth) continue;
     const w=Math.max(2,x1-x0);
     let text='', col='#30363d';
-    if(busName==='SPI'){ text='M:'+it.mosi.toString(16).padStart(2,'0')+' S:'+it.miso.toString(16).padStart(2,'0'); col='#bc8cff'; }
-    else if(busName==='UART'){ text='0x'+it.value.toString(16).padStart(2,'0'); col='#ff9d97'; }
-    else if(busName==='I2C'){
+    if(instType==='SPI'){ text='M:'+it.mosi.toString(16).padStart(2,'0')+' S:'+it.miso.toString(16).padStart(2,'0'); col='#bc8cff'; }
+    else if(instType==='UART'){ text='0x'+it.value.toString(16).padStart(2,'0'); col='#ff9d97'; }
+    else if(instType==='I2C'){
       if(it.type==='START'){ text='S'; col='#3fb950'; }
       else if(it.type==='STOP'){ text='P'; col='#f85149'; }
       else { text='0x'+it.value.toString(16).padStart(2,'0'); col='#7ee787'; }
@@ -914,31 +1025,33 @@ function drawCursorRuler(){
   }
 }
 
+function cmdPrefixFor(inst){ return inst.type.toLowerCase()+inst.id.replace(inst.type,''); }
 function renderDecodeList(){
   const el=document.getElementById('decodeList');
   const parts=[];
-  for(const bus of ['SPI','I2C','UART']){
-    const items=state.decoded[bus];
-    parts.push(`<div style="padding:6px 4px;color:#8b949e;font-size:11px;text-transform:uppercase;">${bus} &mdash; ${items.length} položek</div>`);
+  for(const inst of state.busInstances){
+    const items=state.decoded[inst.id]||[];
+    const prefix=cmdPrefixFor(inst);
+    parts.push(`<div style="padding:6px 4px;color:#8b949e;font-size:11px;text-transform:uppercase;">${inst.name} &mdash; ${items.length} položek</div>`);
     for(const it of items.slice(0,60)){
       const t = fmtTime(it.start/state.sampleRate);
       let label='', cmd='';
-      if(bus==='SPI'){
+      if(inst.type==='SPI'){
         label=`MOSI 0x${it.mosi.toString(16).padStart(2,'0')} / MISO 0x${it.miso.toString(16).padStart(2,'0')}`;
-        cmd='spi '+it.mosi.toString(16).padStart(2,'0');
-      } else if(bus==='UART'){
+        cmd=prefix+' '+it.mosi.toString(16).padStart(2,'0');
+      } else if(inst.type==='UART'){
         const printable = it.value>=32&&it.value<127;
         label=`0x${it.value.toString(16).padStart(2,'0')} ('${String.fromCharCode(printable?it.value:46)}')`;
-        cmd = printable ? ('uart '+String.fromCharCode(it.value)) : ('uart \\x'+it.value.toString(16));
-      } else if(bus==='I2C'){
+        cmd = printable ? (prefix+' '+String.fromCharCode(it.value)) : (prefix+' \\x'+it.value.toString(16));
+      } else if(inst.type==='I2C'){
         label = it.type==='BYTE' ? `0x${it.value.toString(16).padStart(2,'0')}` : it.type;
-        if(it.type==='BYTE') cmd='i2c 50 '+it.value.toString(16).padStart(2,'0');
+        if(it.type==='BYTE') cmd=prefix+' 50 '+it.value.toString(16).padStart(2,'0');
       }
       const btn = cmd ? `<button class="replayBtn" data-cmd="${cmd.replace(/"/g,'&quot;')}" title="Přehrát generátorem">&#9654;</button>` : '';
       parts.push(`<div class="decItem"><span class="t">${t}</span><span>${label}</span>${btn}</div>`);
     }
   }
-  el.innerHTML=parts.join('');
+  el.innerHTML=parts.join('') || '<div class="dimtext" style="padding:8px;">Žádná sběrnice nemá přiřazené kanály — nastavte roli u kanálů vlevo.</div>';
 }
 document.getElementById('decodeList').addEventListener('click', e=>{
   const btn=e.target.closest('.replayBtn'); if(!btn) return;
@@ -1271,12 +1384,6 @@ function setGenChannelData(label,data){
   const ch = state.gen.channels.find(c=>c.label===label);
   if(ch) ch.data=data;
 }
-function setGenRole(bus,role,data){
-  const label=state.busConfig[bus][role];
-  if(!label) throw new Error(bus+' role "'+role+'" nemá přiřazený žádný kanál (nastavte to v seznamu kanálů vlevo)');
-  setGenChannelData(label, data);
-}
-
 function logTerm(text, isError, isInfo){
   const el=document.getElementById('termLog');
   const row=document.createElement('div');
@@ -1285,51 +1392,65 @@ function logTerm(text, isError, isInfo){
   el.appendChild(row); el.scrollTop=el.scrollHeight;
 }
 
+function setGenRoleInst(instId,role,data){
+  const inst=findInstance(instId);
+  if(!inst) throw new Error('sběrnice "'+instId+'" neexistuje');
+  const label=inst.channels[role];
+  if(!label) throw new Error(inst.name+': role "'+role+'" nemá přiřazený kanál — nastavte ji v seznamu kanálů vlevo');
+  setGenChannelData(label,data);
+}
+
 function sendCommand(raw){
   const line=(raw||'').trim();
   if(!line) return;
   logTerm(line,false);
   const parts=line.split(/\s+/);
-  const kind=parts[0].toLowerCase();
+  const kindRaw=parts[0].toLowerCase();
   try{
-    if(kind==='help'){
-      logTerm('Příkazy: uart &lt;text&gt;  |  spi &lt;hex bajty&gt;  |  i2c &lt;adresa hex&gt; &lt;data hex…&gt;  |  clear',false,true);
-    } else if(kind==='clear'){
-      document.getElementById('termLog').innerHTML='';
-    } else if(kind==='uart'){
+    if(kindRaw==='help'){
+      logTerm('Příkazy: uart[N] &lt;text&gt;  |  spi[N] &lt;hex bajty&gt;  |  i2c[N] &lt;adresa hex&gt; &lt;data hex…&gt;  |  clear &mdash; N = číslo sběrnice (výchozí 1), např. "uart2 ahoj"',false,true);
+      return;
+    }
+    if(kindRaw==='clear'){ document.getElementById('termLog').innerHTML=''; return; }
+
+    const m=kindRaw.match(/^(uart|spi|i2c)(\d*)$/);
+    if(!m) throw new Error('neznámý příkaz "'+kindRaw+'" (zkuste "help")');
+    const type=m[1].toUpperCase();
+    const instId=type+(m[2]||'1');
+    const inst=findInstance(instId);
+    if(!inst) throw new Error('sběrnice "'+instId+'" neexistuje (vytvořte ji výběrem role u kanálu vlevo)');
+
+    if(type==='UART'){
       const spaceIdx=line.indexOf(' ');
       const text = spaceIdx===-1 ? '' : line.slice(spaceIdx+1);
-      if(!text) throw new Error('chybí text za "uart"');
-      const {buf,length}=encodeUARTText(text);
-      setGenRole('UART','tx', buf);
+      if(!text) throw new Error('chybí text za "'+kindRaw+'"');
+      const {buf,length}=encodeUARTText(text,{bitWidth:inst.bitWidth});
+      setGenRoleInst(instId,'tx', buf);
       state.gen.totalSamples=length;
-      logTerm('UART odesláno: "'+text+'" ('+text.length+' znaků)',false,true);
-    } else if(kind==='spi'){
+      logTerm(inst.name+' odesláno: "'+text+'" ('+text.length+' znaků)',false,true);
+    } else if(type==='SPI'){
       const bytes=parts.slice(1).map(h=>parseInt(h,16)).filter(n=>!isNaN(n));
-      if(!bytes.length) throw new Error('chybí hex bajty, např. "spi AA BB"');
-      const {clk,mosi,cs,length}=encodeSPIBytes(bytes);
-      setGenRole('SPI','clk',clk); setGenRole('SPI','mosi',mosi); setGenRole('SPI','cs',cs);
-      setGenRole('SPI','miso', new Uint8Array(length));
+      if(!bytes.length) throw new Error('chybí hex bajty, např. "'+kindRaw+' AA BB"');
+      const {clk,mosi,cs,length}=encodeSPIBytes(bytes,{bitWidth:inst.bitWidth});
+      setGenRoleInst(instId,'clk',clk); setGenRoleInst(instId,'mosi',mosi); setGenRoleInst(instId,'cs',cs);
+      setGenRoleInst(instId,'miso', new Uint8Array(length));
       state.gen.totalSamples=length;
-      logTerm('SPI odesláno: '+bytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(' '),false,true);
-    } else if(kind==='i2c'){
+      logTerm(inst.name+' odesláno: '+bytes.map(b=>'0x'+b.toString(16).padStart(2,'0')).join(' '),false,true);
+    } else if(type==='I2C'){
       const hexes=parts.slice(1).map(h=>parseInt(h,16)).filter(n=>!isNaN(n));
-      if(hexes.length<1) throw new Error('chybí adresa, např. "i2c 50 01 02"');
+      if(hexes.length<1) throw new Error('chybí adresa, např. "'+kindRaw+' 50 01 02"');
       const addr=hexes[0], data=hexes.slice(1);
-      const {scl,sda,length}=encodeI2CBytes(addr,data);
-      setGenRole('I2C','scl',scl); setGenRole('I2C','sda',sda);
+      const {scl,sda,length}=encodeI2CBytes(addr,data,{bitWidth:inst.bitWidth});
+      setGenRoleInst(instId,'scl',scl); setGenRoleInst(instId,'sda',sda);
       state.gen.totalSamples=length;
-      logTerm('I2C odesláno: adresa 0x'+addr.toString(16)+', data '+(data.map(b=>'0x'+b.toString(16)).join(' ')||'(žádná)'),false,true);
-    } else {
-      throw new Error('neznámý příkaz "'+kind+'" (zkuste "help")');
+      logTerm(inst.name+' odesláno: adresa 0x'+addr.toString(16)+', data '+(data.map(b=>'0x'+b.toString(16)).join(' ')||'(žádná)'),false,true);
     }
-    if(kind!=='clear' && kind!=='help'){
-      state.gen.sentCommands.push(line);
-      decodeAll();
-      if(state.mode==='generator'){
-        state.totalSamples = Math.max(1,state.gen.totalSamples);
-        resizeCanvases(); zoomToFit();
-      }
+
+    state.gen.sentCommands.push(line);
+    decodeAll();
+    if(state.mode==='generator'){
+      state.totalSamples = Math.max(1,state.gen.totalSamples);
+      resizeCanvases(); zoomToFit();
     }
   }catch(err){
     logTerm('Chyba: '+err.message, true);
@@ -1418,6 +1539,50 @@ function updateTriggerSummary(){
 }
 
 /* ============================================================
+   BUS INSTANCE SETTINGS (speed / bit count / stop bits / parity)
+   ============================================================ */
+function openBusSettings(instId){
+  const inst=findInstance(instId); if(!inst) return;
+  document.getElementById('busSettingsPanel').dataset.inst=instId;
+  document.getElementById('busSettingsTitle').textContent='Nastavení — '+inst.name+' ('+inst.type+')';
+  document.getElementById('bsName').value=inst.name;
+  document.getElementById('bsBitWidth').value=inst.bitWidth;
+  document.getElementById('bsDataBits').value=inst.dataBits;
+  const isUart = inst.type==='UART';
+  document.getElementById('bsStopBitsRow').style.display = isUart?'flex':'none';
+  document.getElementById('bsParityRow').style.display = isUart?'flex':'none';
+  if(isUart){
+    document.getElementById('bsStopBits').value=inst.stopBits;
+    document.getElementById('bsParity').value=inst.parity;
+  }
+  document.getElementById('busSettingsPanel').classList.add('open');
+}
+document.getElementById('bsApply').addEventListener('click', ()=>{
+  const instId=document.getElementById('busSettingsPanel').dataset.inst;
+  const inst=findInstance(instId); if(!inst) return;
+  inst.name=document.getElementById('bsName').value||inst.name;
+  inst.bitWidth=Math.max(2,Number(document.getElementById('bsBitWidth').value)||inst.bitWidth);
+  inst.dataBits=Number(document.getElementById('bsDataBits').value)||8;
+  if(inst.type==='UART'){
+    inst.stopBits=Number(document.getElementById('bsStopBits').value)||2;
+    inst.parity=document.getElementById('bsParity').value;
+  }
+  document.getElementById('busSettingsPanel').classList.remove('open');
+  decodeAll(); buildSidebar(); draw();
+  toast(inst.name+' — nastavení uloženo','good');
+});
+document.getElementById('bsRemove').addEventListener('click', ()=>{
+  const instId=document.getElementById('busSettingsPanel').dataset.inst;
+  const inst=findInstance(instId); if(!inst) return;
+  for(const role of Object.keys(inst.channels)) inst.channels[role]=null;
+  state.busInstances = state.busInstances.filter(b=>b.id!==instId);
+  syncChannelBusTags();
+  document.getElementById('busSettingsPanel').classList.remove('open');
+  decodeAll(); buildSidebar(); resizeCanvases(); draw();
+  toast(inst.name+' odebrána');
+});
+
+/* ============================================================
    ROLL MODE
    ============================================================ */
 let rollTimer=null;
@@ -1444,12 +1609,14 @@ document.getElementById('btnRoll').addEventListener('click', function(){
    ============================================================ */
 function init(){
   if(window.innerWidth<=760) document.getElementById('sidebar').classList.add('collapsed');
+  state.busInstances = defaultBusInstances();
   generateTestData();
   state.analyzer = {channels: state.channels, sampleRate: state.sampleRate, totalSamples: state.totalSamples};
   state.gen = {
-    channels: CHDEFS.map((c,i)=>({...c, id:i, level:'5V', visible:true, data:new Uint8Array(0)})),
+    channels: CHDEFS.map((c,i)=>({...c, id:i, bus:c.staticBus, level:'5V', visible:true, data:new Uint8Array(0)})),
     sampleRate: SAMPLE_RATE, totalSamples: 0, sentCommands: [],
   };
+  syncChannelBusTags();
   refreshPresetSelect();
   updateTriggerSummary();
   buildSidebar();
