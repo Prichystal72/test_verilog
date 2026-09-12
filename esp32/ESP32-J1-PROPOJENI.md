@@ -5,7 +5,7 @@ Vizuální verze (schéma + tabulky): https://claude.ai/code/artifact/976d9a5f-2
 Fyzické spojení ESP32 (WROOM-32, 30pin DevKit) s FPGA jde přes **J1
 konektor, sdílené piny (pozice 8-15)** — ty jsou stejné/společné na
 všech 8 HUB75 konektorech (viz
-[../../docs/hub75-konektory-piny.md](../../docs/hub75-konektory-piny.md)),
+[../fpga/docs/hub75-konektory-piny.md](../fpga/docs/hub75-konektory-piny.md)),
 takže J1 je jen fyzický přístupový bod, ne že by signál patřil jen
 jemu.
 
@@ -42,7 +42,7 @@ jaké platilo u STM32/DirtyJTAG zapojení.
 
 - **JTAG programování FPGA** — pořád přes STM32/DirtyJTAG, beze
   změny, neřeší se tady (viz
-  [../../docs/board-colorlight-5a75b-v8.md](../../docs/board-colorlight-5a75b-v8.md)).
+  [../fpga/docs/board-colorlight-5a75b-v8.md](../fpga/docs/board-colorlight-5a75b-v8.md)).
 - **SD karta (SPI-B)** — samostatné ESP32 piny (VSPI: 18/23/19/5, viz
   [HW-POZADAVKY.md](HW-POZADAVKY.md)), nesouvisí s J1/FPGA vůbec.
 - **74HC245 na J1 unikátních pinech (1,2,3,5,6,7)** — to je vstupní

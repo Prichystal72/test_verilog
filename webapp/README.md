@@ -1,5 +1,7 @@
 # Logic Analyzer — webová aplikace (prototyp)
 
+![Screenshot appky](screenshot.png)
+
 Samostatná, na ničem nezávislá webová aplikace (`index.html`, žádný
 build krok, žádný server) — logický analyzátor ve stylu moderních
 nástrojů (Saleae Logic 2 / PulseView): barevné průběhy, zoom/pan

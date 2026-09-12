@@ -25,7 +25,7 @@ konektory** (J1-J8) místo přímého připojení LED panelů. Řeší:
 
 **16 vstupních + 16 výstupních = 32 datových kanálů celkem.** Z 56
 dostupných HUB75 pinů (viz
-[../../docs/hub75-konektory-piny.md](../../docs/hub75-konektory-piny.md))
+[../fpga/docs/hub75-konektory-piny.md](../fpga/docs/hub75-konektory-piny.md))
 zbývá 24 volných — dost rezervy na SPI/SD linky k ESP32 a další
 řídicí signály. Rozdělení 32 kanálů nemusí kopírovat hranice
 konektorů J1-J8 (na interposer desce se stejně vše přesměruje přes
@@ -35,7 +35,7 @@ dostupných pinů.
 ## Přepínání úrovně/směru per kanál
 
 Aplikace dnes má u každého kanálu jen **popisek** 5V/3.3V (viz
-`tools/logic-analyzer/index.html`) — žádné skutečné řízení HW. Pro
+`webapp/index.html`) — žádné skutečné řízení HW. Pro
 32 kanálů, kde by se úroveň/směr měl dát reálně přepínat, dává smysl:
 
 - **Analogový přepínač na kanál** (např. `74HC4066` — 4× obousměrný

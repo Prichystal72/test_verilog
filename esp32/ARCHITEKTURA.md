@@ -29,7 +29,7 @@ MicroSD modul (SPI) na ESP32 — trvalé úložiště presetů/záznamů
 
 - **Výstupy (generátor): fungují bez úprav hned.** HUB75 piny jsou
   přes 74HC245 natvrdo výstupní, viz
-  [../../docs/hub75-konektory-piny.md](../../docs/hub75-konektory-piny.md).
+  [../fpga/docs/hub75-konektory-piny.md](../fpga/docs/hub75-konektory-piny.md).
 - **Vstupy (capture z vnějšího signálu): vyžadují výměnu 12×
   74HC245 → SN74CBT3245A** (pin-kompatibilní FET bus switch, viz
   chubby75 dokumentace) — hardwarový zásah, zatím neproveden.

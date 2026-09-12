@@ -9,7 +9,7 @@ průchodu přes 74HC245 (ten by je natvrdo vytáhl na 5V, viz
 konektor-stranou pro každý ze 6 unikátních datových pinů.
 
 ⚠️ Nemáme reálné schéma desky (jen piny z reverse-engineeringu, viz
-[../../docs/hub75-konektory-piny.md](../../docs/hub75-konektory-piny.md)) —
+[../fpga/docs/hub75-konektory-piny.md](../fpga/docs/hub75-konektory-piny.md)) —
 **nevíme jistě fyzické rozmístění pinů 74HC245 pouzdra na desce ani
 přesně to, který konkrétní čip ze 12 obsluhuje který konektor.** Než
 se pájí, ověřit multimetrem (kontinuita) na reálné desce, že se
